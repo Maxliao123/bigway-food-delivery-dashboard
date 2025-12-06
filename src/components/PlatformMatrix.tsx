@@ -43,10 +43,15 @@ type SortState = {
 
 type Props = {
   language: Lang;
+  selectedRegion: string;
+  selectedMonth: string;
 };
 
-export const PlatformMatrix: React.FC<Props> = ({ language }) => {
-  const { loading, error, currentMonth, prevMonth, rows } = usePlatformMatrix();
+export const PlatformMatrix: React.FC<Props> = ({ language, selectedRegion, selectedMonth }) => {
+  const { loading, error, currentMonth, prevMonth, rows } = usePlatformMatrix(
+    selectedRegion,
+    selectedMonth,
+  );
   const [sort, setSort] = useState<SortState>({
     key: 'region',
     direction: 'asc',
@@ -150,8 +155,8 @@ export const PlatformMatrix: React.FC<Props> = ({ language }) => {
           >
             <span>
               {isZh
-                ? 'BC / ON / CA — 門店層級'
-                : 'BC / ON / CA — Store Level'}
+                ? `${selectedRegion} — 門店層級`
+                : `${selectedRegion} — Store Level`}
             </span>
             <span>
               {isZh ? '當月：' : 'Current: '}

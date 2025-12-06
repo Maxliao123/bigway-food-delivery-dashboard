@@ -6,29 +6,39 @@ import {
   formatPercent,
   getMoMColor,
 } from '../lib/heatmapUtils';
-import type { Lang } from '../App';
+import type { Lang, Scope } from '../App';
 
 type Props = {
   language: Lang;
-  selectedRegion: string | null;
-  onSelectRegion: (region: string) => void;
+  selectedRegion: Scope | null;
+  selectedMonth: string;
+  onSelectRegion: (region: Scope) => void;
 };
 
 export const RegionHeatmap: React.FC<Props> = ({
   language,
   selectedRegion,
+  selectedMonth,
   onSelectRegion,
 }) => {
   const { loading, error, months, rows } = useMoMHeatmap();
   const isZh = language === 'zh';
 
   const { periodMonths, regions, momByRegion } = useMemo(() => {
-    const periodMonths = months.slice(-3); // 最近三個月
-    const regions = Array.from(new Set(rows.map(r => r.region))).sort();
+    const selectedIdx = months.indexOf(selectedMonth);
+    const periodMonths =
+      selectedIdx === -1
+        ? months.slice(-3)
+        : months.slice(Math.max(0, selectedIdx - 2), selectedIdx + 1);
+    const allRegions = Array.from(new Set(rows.map(r => r.region))).filter(
+      (r): r is Scope => ['BC', 'ON', 'CA'].includes(r as Scope)
+    );
+    const regions: Scope[] = selectedRegion ? [selectedRegion] : allRegions.sort();
 
     const revenueByRegion: Record<string, Record<string, number>> = {};
     for (const r of rows) {
       if (!periodMonths.includes(r.month)) continue;
+      if (selectedRegion && r.region !== selectedRegion) continue;
       if (!revenueByRegion[r.region]) revenueByRegion[r.region] = {};
       revenueByRegion[r.region][r.month] =
         (revenueByRegion[r.region][r.month] || 0) + r.revenue;
@@ -55,7 +65,7 @@ export const RegionHeatmap: React.FC<Props> = ({
     }
 
     return { periodMonths, regions, momByRegion };
-  }, [months, rows]);
+  }, [months, rows, selectedMonth, selectedRegion]);
 
   if (loading) {
     return (
