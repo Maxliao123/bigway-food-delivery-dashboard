@@ -42,13 +42,16 @@ type Props = {
 type MetricKey = 'revenue' | 'orders' | 'aov';
 
 type BreakdownRow = {
-  key: string; // Region or Platform
+  key: string; // Platform
   current: number;
-  share: number | null;   // 新增：當月平台佔比
+  share: number | null;
   previous: number | null;
   mom: number | null;
-  yoy: number | null;     // 仍保留計算，但表格不顯示
+  yoy: number | null; // 保留計算，但目前不顯示
 };
+
+type SortKey = 'current' | 'share' | 'previous' | 'mom';
+type SortDir = 'asc' | 'desc';
 
 // ========= formatter =========
 const formatCurrency = (value: number | null | undefined) => {
@@ -95,25 +98,39 @@ export const ExecutiveSummary: React.FC<Props> = ({
   rawRows,
 }) => {
   const [activeMetric, setActiveMetric] = useState<MetricKey>('revenue');
+  const [sortKey, setSortKey] = useState<SortKey>('current');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
   const isZh = language === 'zh';
   const isOverview = false;
 
- const monthLabel = (iso: string | null) => {
-  if (!iso) return '—';
-  const short = iso.slice(0, 7); // "YYYY-MM"
-  const [year, month] = short.split('-');
-  const mNum = Number(month);
-  if (!year || !mNum || Number.isNaN(mNum)) return short;
+  const monthLabel = (iso: string | null) => {
+    if (!iso) return '—';
+    const short = iso.slice(0, 7); // "YYYY-MM"
+    const [year, month] = short.split('-');
+    const mNum = Number(month);
+    if (!year || !mNum || Number.isNaN(mNum)) return short;
 
-  if (isZh) {
-    return `${year}年${month}月`;
-  }
+    if (isZh) {
+      return `${year}年${month}月`;
+    }
 
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${MONTHS[mNum - 1]} ${year}`;
-};
-
+    const MONTHS = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return `${MONTHS[mNum - 1]} ${year}`;
+  };
 
   // ========= 原 regional arrays（現在主要用在空資料 fallback） =========
   const revenueRegions = regionalRevenueKpis || [];
@@ -225,7 +242,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
     rawRows,
   ]);
 
- // ========= 下方表格（Region / Platform breakdown） =========
+  // ========= 下方表格（Platform breakdown） =========
   const breakdownRows: BreakdownRow[] = useMemo(() => {
     if (!periodMonths.length) return [];
 
@@ -270,7 +287,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
       rows.push({
         key,
         current: currVal,
-        share: null,      // 先佔位，下面統一算
+        share: null, // 先佔位，下面統一算
         previous: prevVal,
         mom,
         yoy,
@@ -285,7 +302,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
 
     return rows.map((row) => ({
       ...row,
-      share: row.current / totalCurrent, // 這裡就是你要的「當月平台佔比」
+      share: row.current / totalCurrent,
     }));
   }, [
     activeMetric,
@@ -296,6 +313,61 @@ export const ExecutiveSummary: React.FC<Props> = ({
     selectedRegion,
   ]);
 
+  // 排序後的 rows
+  const sortedBreakdownRows = useMemo(() => {
+    const rows = [...breakdownRows];
+
+    const dirFactor = sortDir === 'asc' ? 1 : -1;
+
+    rows.sort((a, b) => {
+      const va = a[sortKey];
+      const vb = b[sortKey];
+
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1; // null 一律排在後面
+      if (vb == null) return -1;
+
+      if (va === vb) return 0;
+      return va > vb ? dirFactor : -dirFactor;
+    });
+
+    return rows;
+  }, [breakdownRows, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('desc'); // 預設新欄位先用 desc
+    }
+  };
+
+  const renderSortIcon = (key: SortKey) => {
+    if (sortKey !== key) {
+      return (
+        <span
+          style={{
+            marginLeft: 4,
+            opacity: 0.3,
+            fontSize: 10,
+          }}
+        >
+          ↕
+        </span>
+      );
+    }
+    return (
+      <span
+        style={{
+          marginLeft: 4,
+          fontSize: 10,
+        }}
+      >
+        {sortDir === 'asc' ? '▲' : '▼'}
+      </span>
+    );
+  };
 
   // ========= 文案 + formatter =========
   const metricConfig: Record<
@@ -387,8 +459,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
             {formatCurrency(effectiveRevenueKpi.current)}
           </div>
           <div className="kpi-sub">
-            {isZh ? '對比' : 'vs'}{' '}
-            {periodInfo.previousLabel}
+            {isZh ? '對比' : 'vs'} {periodInfo.previousLabel}
             {' · '}
             <span className={getDeltaClass(effectiveRevenueKpi.mom)}>
               {formatPercent(effectiveRevenueKpi.mom)}
@@ -407,8 +478,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
             {formatNumber(effectiveOrdersKpi.current)}
           </div>
           <div className="kpi-sub">
-            {isZh ? '對比' : 'vs'}{' '}
-            {periodInfo.previousLabel}
+            {isZh ? '對比' : 'vs'} {periodInfo.previousLabel}
             {' · '}
             <span className={getDeltaClass(effectiveOrdersKpi.mom)}>
               {formatPercent(effectiveOrdersKpi.mom)}
@@ -425,8 +495,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
             {formatAov(effectiveAovKpi.current)}
           </div>
           <div className="kpi-sub">
-            {isZh ? '對比' : 'vs'}{' '}
-            {periodInfo.previousLabel}
+            {isZh ? '對比' : 'vs'} {periodInfo.previousLabel}
             {' · '}
             <span className={getDeltaClass(effectiveAovKpi.mom)}>
               {formatPercent(effectiveAovKpi.mom)}
@@ -435,15 +504,17 @@ export const ExecutiveSummary: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* ===== Region / Platform Breakdown ===== */}
+      {/* ===== Platform Breakdown ===== */}
       <div className="region-card">
         <div className="region-header">
           <div>
             <div className="region-title">{cardTitle}</div>
             <div className="region-subtitle">
-              {`${isZh ? '當月：' : 'Current: '} ${periodInfo.currentLabel} · ${
-                isZh ? '前一月：' : 'Prev: '
-              } ${periodInfo.previousLabel} · ${isZh ? '區域：' : 'Region: '} ${selectedRegion}`}
+              {`${isZh ? '當月：' : 'Current: '} ${
+                periodInfo.currentLabel
+              } · ${isZh ? '前一月：' : 'Prev: '} ${
+                periodInfo.previousLabel
+              } · ${isZh ? '區域：' : 'Region: '} ${selectedRegion}`}
             </div>
           </div>
 
@@ -480,60 +551,124 @@ export const ExecutiveSummary: React.FC<Props> = ({
 
         <div className="region-table-wrapper">
           <table className="region-table">
-           <thead>
-  <tr>
-    <th style={{ textAlign: 'left' }}>{firstColumnLabel}</th>
-    <th style={{ textAlign: 'right' }}>
-      {periodInfo.currentLabel}
-    </th>
-    <th style={{ textAlign: 'right' }}>
-      {isZh
-        ? `${periodInfo.currentLabel} 平台占比`
-        : `${periodInfo.currentLabel} share`}
-    </th>
-    <th style={{ textAlign: 'right' }}>
-      {periodInfo.previousLabel}
-    </th>
-    <th style={{ textAlign: 'right' }}>
-      {periodInfo.momTitle}
-    </th>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>{firstColumnLabel}</th>
 
+                <th style={{ textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleSort('current')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {periodInfo.currentLabel}
+                    {renderSortIcon('current')}
+                  </button>
+                </th>
+
+                <th style={{ textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleSort('share')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {isZh
+                      ? `${periodInfo.currentLabel} 平台占比`
+                      : `${periodInfo.currentLabel} share`}
+                    {renderSortIcon('share')}
+                  </button>
+                </th>
+
+                <th style={{ textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleSort('previous')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {periodInfo.previousLabel}
+                    {renderSortIcon('previous')}
+                  </button>
+                </th>
+
+                <th style={{ textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleSort('mom')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {periodInfo.momTitle}
+                    {renderSortIcon('mom')}
+                  </button>
+                </th>
               </tr>
             </thead>
-            <tbody>
-  {breakdownRows.map((row) => (
-    <tr key={row.key}>
-      <td>{row.key}</td>
-      <td style={{ textAlign: 'right' }}>
-        {activeFormatter(row.current)}
-      </td>
-      <td style={{ textAlign: 'right' }}>
-        {row.share == null
-          ? isZh
-            ? '暫無數據'
-            : 'No data'
-          : formatPercent(row.share)}
-      </td>
-      <td style={{ textAlign: 'right' }}>
-        {row.previous == null
-          ? isZh
-            ? '暫無數據'
-            : 'No data'
-          : activeFormatter(row.previous)}
-      </td>
-      <td style={{ textAlign: 'right' }}>
-        <span className={`region-mom ${getDeltaClass(row.mom)}`}>
-          {row.previous == null
-            ? isZh
-              ? '暫無數據'
-              : 'No data'
-            : formatPercent(row.mom)}
-        </span>
-      </td>
-    </tr>
-  ))}
 
-              {breakdownRows.length === 0 && (
+            <tbody>
+              {sortedBreakdownRows.map((row) => (
+                <tr key={row.key}>
+                  <td>{row.key}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {activeFormatter(row.current)}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    {row.share == null
+                      ? isZh
+                        ? '暫無數據'
+                        : 'No data'
+                      : formatPercent(row.share)}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    {row.previous == null
+                      ? isZh
+                        ? '暫無數據'
+                        : 'No data'
+                      : activeFormatter(row.previous)}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <span className={`region-mom ${getDeltaClass(row.mom)}`}>
+                      {row.previous == null
+                        ? isZh
+                          ? '暫無數據'
+                          : 'No data'
+                        : formatPercent(row.mom)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+
+              {sortedBreakdownRows.length === 0 && (
                 <tr>
                   <td
                     colSpan={5}
@@ -550,3 +685,4 @@ export const ExecutiveSummary: React.FC<Props> = ({
     </div>
   );
 };
+
