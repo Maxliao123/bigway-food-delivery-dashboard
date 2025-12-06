@@ -37,6 +37,7 @@ export const RegionHeatmap: React.FC<Props> = ({
       (r): r is Scope => ['BC', 'ON', 'CA'].includes(r as Scope)
     );
     const regions: Scope[] = selectedRegion ? [selectedRegion] : allRegions.sort();
+
     const regions = selectedRegion
       ? [selectedRegion]
       : Array.from(new Set(rows.map(r => r.region))).sort();

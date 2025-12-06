@@ -4,10 +4,6 @@ import './App.css';
 import { useDashboardData } from './hooks/useDashboardData';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PlatformMatrix } from './components/PlatformMatrix';
-import { RevenueTrend } from './components/RevenueTrend';
-import { RegionComparison } from './components/RegionComparison';
-import { RegionHeatmap } from './components/RegionHeatmap';
-import { StoreHeatmap } from './components/StoreHeatmap';
 
 export type Lang = 'en' | 'zh';
 export type Scope = 'BC' | 'ON' | 'CA';
@@ -188,6 +184,12 @@ function App() {
             {/* 2️⃣ Platform Velocity Matrix */}
             <section className="section-card">
               <PlatformMatrix
+                language={language}
+                selectedRegion={selectedRegion}
+                selectedMonth={selectedMonth}
+              />
+            </section>
+
                 language={language}
                 selectedRegion={selectedRegion}
                 selectedMonth={selectedMonth}
