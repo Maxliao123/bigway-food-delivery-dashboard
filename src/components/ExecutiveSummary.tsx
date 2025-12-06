@@ -93,6 +93,12 @@ const getDeltaClass = (value: number | null | undefined) => {
   return '';
 };
 
+/**
+ * 近三個月平台趨勢折線圖
+ * - 高度壓低一點（height 170）
+ * - 數字標籤使用 valueFormatter（營收/客單價含 $，不再用 k 簡寫）
+ * - 會自動判斷標籤要畫在點上方或下方，避免被裁切
+ */
 const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
   series,
   months,
@@ -119,9 +125,10 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
     );
   }
 
+  // 高度/邊距調整：整體更扁、和卡片比例接近
   const width = 420;
-  const height = 220;
-  const margin = { top: 16, right: 16, bottom: 40, left: 40 };
+  const height = 170;
+  const margin = { top: 10, right: 16, bottom: 32, left: 40 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
 
@@ -138,24 +145,6 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
   };
 
   const COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
-
-  const formatShort = (v: number) => {
-    const raw = valueFormatter(v); // 可能是 $12,345 或 12,345
-
-    // 先抓出數字部分
-    const numeric = Number(
-      String(raw).replace(/[^0-9.-]/g, ''),
-    );
-    const num = Number.isNaN(numeric) ? Math.abs(v) : Math.abs(numeric);
-
-    if (num >= 1_000_000) {
-      return `${(num / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
-    }
-    if (num >= 10_000) {
-      return `${(num / 1000).toFixed(0)}k`;
-    }
-    return raw;
-  };
 
   return (
     <div className="platform-trend-chart">
@@ -198,15 +187,15 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
         {/* X 軸月份標籤 */}
         {months.map((m, idx) => {
           const x = getX(idx);
-          const y = margin.top + chartHeight + 20;
+          const y = margin.top + chartHeight + 18;
           return (
             <text
               key={m}
               x={x}
               y={y}
               textAnchor="middle"
-              fontSize={11}
-              fill="rgba(255,255,255,0.5)"
+              fontSize={10}
+              fill="rgba(255,255,255,0.55)"
             >
               {monthLabelFn(m)}
             </text>
@@ -231,12 +220,20 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
                 d={pathD}
                 fill="none"
                 stroke={color}
-                strokeWidth={2}
+                strokeWidth={1.8}
                 strokeLinecap="round"
               />
               {s.points.map((p, idx) => {
                 const x = getX(idx);
                 const y = getY(p.value);
+                const label = valueFormatter(p.value); // 直接用 formatter，保留 $
+
+                // 預設在點上方，如果太靠近頂部就改到點下方
+                let labelY = y - 8;
+                if (labelY < margin.top + 8) {
+                  labelY = y + 12;
+                }
+
                 return (
                   <g key={idx}>
                     <circle
@@ -249,12 +246,12 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
                     />
                     <text
                       x={x}
-                      y={y - 10}
+                      y={labelY}
                       textAnchor="middle"
-                      fontSize={11}
+                      fontSize={9.5}
                       fill={color}
                     >
-                      {formatShort(p.value)}
+                      {label}
                     </text>
                   </g>
                 );
