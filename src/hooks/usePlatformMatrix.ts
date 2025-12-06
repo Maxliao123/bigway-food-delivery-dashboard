@@ -56,9 +56,12 @@ export function usePlatformMatrix() {
       }));
 
       // 找月份：最新 & 前一個月
-      const uniqueMonths = Array.from(new Set(casted.map(r => r.month))).sort();
-      const cm = uniqueMonths.at(-1) ?? null;
-      const pm = uniqueMonths.length >= 2 ? uniqueMonths.at(-2) : null;
+      const uniqueMonths = Array.from(new Set(casted.map((r) => r.month))).sort();
+
+      const cm: string | null = uniqueMonths.at(-1) ?? null;
+      const pm: string | null =
+        uniqueMonths.length >= 2 ? uniqueMonths.at(-2) ?? null : null;
+
       setCurrentMonth(cm);
       setPrevMonth(pm);
 
@@ -68,8 +71,8 @@ export function usePlatformMatrix() {
         return;
       }
 
-      const currentRows = casted.filter(r => r.month === cm);
-      const prevRows = pm ? casted.filter(r => r.month === pm) : [];
+      const currentRows = casted.filter((r) => r.month === cm);
+      const prevRows = pm ? casted.filter((r) => r.month === pm) : [];
 
       // 以 store + region 為 key 聚合
       const map = new Map<string, PlatformRow>();
