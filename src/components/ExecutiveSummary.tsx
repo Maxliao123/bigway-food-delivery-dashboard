@@ -159,10 +159,16 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
     return margin.top + chartHeight - ratio * chartHeight;
   };
 
-  const COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
+  // 固定平台顏色：UBER = 藍、Fantuan = 綠、Doordash = 黃
+  const PLATFORM_COLORS: Record<string, string> = {
+    UBER: '#3b82f6',
+    Fantuan: '#22c55e',
+    Doordash: '#eab308',
+  };
+  const FALLBACK_COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
 
-  // ⭐ 三條線時字級更小一點
-  const labelFontSize = series.length >= 3 ? 8 : 9.5;
+  // 三條線時字級再小一點，避免互相擠壓
+  const labelFontSize = series.length >= 3 ? 10 : 11;
 
   // 避免同一個 x 位置上標籤互相重疊
   const usedLabelY: Record<number, number[]> = {};
@@ -170,7 +176,6 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
     if (!usedLabelY[xIndex]) usedLabelY[xIndex] = [];
     const taken = usedLabelY[xIndex];
 
-    // ⭐ 三條線時要求更大的最小間距
     const minGap = series.length >= 3 ? 16 : 14;
 
     let finalY = proposedY;
@@ -228,7 +233,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
             x={getX(idx)}
             y={margin.top + chartHeight + 18}
             textAnchor="middle"
-            fontSize={10}
+            fontSize={12}
             fill="rgba(255,255,255,0.55)"
           >
             {monthLabelFn(m)}
@@ -237,7 +242,9 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
 
         {/* 線條 + 點 + 數字標籤 */}
         {series.map((s, si) => {
-          const color = COLORS[si % COLORS.length];
+          const color =
+            PLATFORM_COLORS[s.platform] ??
+            FALLBACK_COLORS[si % FALLBACK_COLORS.length];
 
           const pathD = s.points
             .map((p, idx) => {
@@ -294,20 +301,24 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
       </svg>
 
       <div className="platform-trend-legend">
-        {series.map((s, si) => (
+        {series.map((s, si) => {
+          const color =
+            PLATFORM_COLORS[s.platform] ??
+            FALLBACK_COLORS[si % FALLBACK_COLORS.length];
+        return (
           <div key={s.platform} className="platform-trend-legend-item">
             <span
               className="platform-trend-legend-dot"
-              style={{ backgroundColor: COLORS[si % COLORS.length] }}
+              style={{ backgroundColor: color }}
             />
             <span>{s.platform}</span>
           </div>
-        ))}
+        );
+        })}
       </div>
     </div>
   );
 };
-
 
 export const ExecutiveSummary: React.FC<Props> = ({
   language,
