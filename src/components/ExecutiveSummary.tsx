@@ -1,5 +1,5 @@
 // src/components/ExecutiveSummary.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { Lang, Scope } from '../App';
 import type { PlatformKpi, SalesRow } from '../hooks/useDashboardData';
 
@@ -18,6 +18,8 @@ type RegionalKpi = {
 
 type Props = {
   language: Lang;
+  selectedRegion: Scope;
+  selectedMonth: string;
   currentMonth: string | null;
   prevMonth: string | null;
   revenueKpi: Kpi;
@@ -78,6 +80,8 @@ const getDeltaClass = (value: number | null | undefined) => {
 
 export const ExecutiveSummary: React.FC<Props> = ({
   language,
+  selectedRegion,
+  selectedMonth,
   currentMonth,
   prevMonth,
   revenueKpi,
@@ -90,20 +94,8 @@ export const ExecutiveSummary: React.FC<Props> = ({
   rawRows,
 }) => {
   const [activeMetric, setActiveMetric] = useState<MetricKey>('revenue');
-  const [scope, setScope] = useState<Scope>('overview'); // ⬅️ local scope
   const isZh = language === 'zh';
-  const isOverview = scope === 'overview';
-
-  const [rangeStart, setRangeStart] = useState<string | null>(null);
-  const [rangeEnd, setRangeEnd] = useState<string | null>(null);
-
-  // 初始：預設分析最新一個月
-  useEffect(() => {
-    if (!allMonths.length) return;
-    const latest = allMonths[allMonths.length - 1];
-    setRangeStart(prev => prev ?? latest);
-    setRangeEnd(prev => prev ?? latest);
-  }, [allMonths]);
+  const isOverview = false;
 
   const monthLabel = (iso: string | null) => {
     if (!iso) return '—';
@@ -126,105 +118,50 @@ export const ExecutiveSummary: React.FC<Props> = ({
   const ordersRegions = regionalOrdersKpis || [];
   const aovRegions = regionalAovKpis || [];
 
-  // ========= 時間區間計算（single / range） =========
-  const periodInfo = useMemo(() => {
-    if (!allMonths.length || !rangeStart || !rangeEnd) {
-      return {
-        hasRange: false,
-        mode: 'single' as 'single' | 'range',
-        periodMonths: [] as string[],
-        prevMonths: [] as string[],
-        yoyMonths: [] as string[],
-        currentLabel: isZh ? '當期' : 'Current',
-        previousLabel: isZh ? '前一月/區間' : 'Previous',
-        momTitle: 'MoM',
-        yoyTitle: 'YoY',
-      };
-    }
+  const selectedIndex = useMemo(
+    () => allMonths.findIndex((m) => m === selectedMonth),
+    [allMonths, selectedMonth],
+  );
 
-    const startIdx = allMonths.indexOf(rangeStart);
-    const endIdx = allMonths.indexOf(rangeEnd);
-    if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) {
-      return {
-        hasRange: false,
-        mode: 'single' as 'single' | 'range',
-        periodMonths: [] as string[],
-        prevMonths: [] as string[],
-        yoyMonths: [] as string[],
-        currentLabel: isZh ? '當期' : 'Current',
-        previousLabel: isZh ? '前一月/區間' : 'Previous',
-        momTitle: 'MoM',
-        yoyTitle: 'YoY',
-      };
-    }
+  const prevMonthSelection = useMemo(() => {
+    if (selectedIndex <= 0) return null;
+    return allMonths[selectedIndex - 1];
+  }, [allMonths, selectedIndex]);
 
-    const periodMonths = allMonths.slice(startIdx, endIdx + 1);
-    const len = periodMonths.length;
-    const mode: 'single' | 'range' = len === 1 ? 'single' : 'range';
+  const yoyMonthSelection = useMemo(() => {
+    if (selectedIndex < 12) return null;
+    return allMonths[selectedIndex - 12];
+  }, [allMonths, selectedIndex]);
 
-    // prev period（同長度）
-    const prevEndIdx = startIdx - 1;
-    const prevStartIdx = prevEndIdx - (len - 1);
-    const hasPrev = prevStartIdx >= 0 && prevEndIdx >= 0;
-    const prevMonths = hasPrev
-      ? allMonths.slice(prevStartIdx, prevEndIdx + 1)
-      : [];
+  const periodMonths = useMemo(() => {
+    if (selectedIndex === -1) return [] as string[];
+    const start = Math.max(0, selectedIndex - 2);
+    return allMonths.slice(start, selectedIndex + 1);
+  }, [allMonths, selectedIndex]);
 
-    // YoY period
-    const yoyStartIdx = startIdx - 12;
-    const yoyEndIdx = endIdx - 12;
-    const hasYoy =
-      yoyStartIdx >= 0 && yoyEndIdx >= yoyStartIdx && yoyEndIdx < allMonths.length;
-    const yoyMonths = hasYoy
-      ? allMonths.slice(yoyStartIdx, yoyEndIdx + 1)
-      : [];
+  const prevMonths = useMemo(
+    () => (prevMonthSelection ? [prevMonthSelection] : []),
+    [prevMonthSelection],
+  );
 
-    const makeRangeText = (s: string, e: string) => {
-      if (s === e) return monthLabel(s);
-      return `${monthLabel(s)} – ${monthLabel(e)}`;
-    };
+  const yoyMonths = useMemo(
+    () => (yoyMonthSelection ? [yoyMonthSelection] : []),
+    [yoyMonthSelection],
+  );
 
-    let currentLabel: string;
-    let previousLabel: string;
-    let momTitle: string;
-    let yoyTitle: string;
-
-    if (mode === 'single') {
-      currentLabel = monthLabel(rangeStart);
-      previousLabel =
-        hasPrev && prevMonths.length
-          ? monthLabel(allMonths[prevEndIdx])
-          : isZh
-          ? '前一月'
-          : 'Prev month';
-      momTitle = 'MoM';
-      yoyTitle = 'YoY';
-    } else {
-      currentLabel = makeRangeText(rangeStart, rangeEnd);
-      previousLabel =
-        hasPrev && prevMonths.length
-          ? makeRangeText(allMonths[prevStartIdx], allMonths[prevEndIdx])
-          : isZh
-          ? '前一區間'
-          : 'Prev period';
-      momTitle = isZh ? '區間變化' : 'Δ vs prev period';
-      yoyTitle = isZh ? '同比去年區間' : 'YoY vs last year period';
-    }
-
-    return {
-      hasRange: true,
-      mode,
-      periodMonths,
-      prevMonths,
-      yoyMonths,
-      currentLabel,
-      previousLabel,
-      momTitle,
-      yoyTitle,
-    };
-  }, [allMonths, rangeStart, rangeEnd, isZh]);
-
-  const { periodMonths, prevMonths, yoyMonths } = periodInfo;
+  const periodInfo = useMemo(
+    () => ({
+      currentLabel: monthLabel(selectedMonth),
+      previousLabel: prevMonthSelection
+        ? monthLabel(prevMonthSelection)
+        : isZh
+        ? '無前期'
+        : 'No prev month',
+      momTitle: 'MoM',
+      yoyTitle: 'YoY',
+    }),
+    [isZh, prevMonthSelection, selectedMonth],
+  );
 
   // ========= 加總工具 =========
   const sumForMonths = (
@@ -246,7 +183,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
 
   // ========= 上方 KPI（總營收 / 總訂單 / Global AOV） =========
   const cardKpis = useMemo(() => {
-    if (!periodInfo.hasRange || !periodMonths.length) {
+    if (!selectedMonth) {
       return {
         revenue: revenueKpi,
         orders: ordersKpi,
@@ -254,8 +191,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
       };
     }
 
-    const scopeFilter = (row: SalesRow) =>
-      scope === 'overview' ? true : row.region === scope;
+    const scopeFilter = (row: SalesRow) => row.region === selectedRegion;
 
     const currAgg = sumForMonths(periodMonths, scopeFilter);
     const prevAgg = sumForMonths(prevMonths, scopeFilter);
@@ -278,45 +214,31 @@ export const ExecutiveSummary: React.FC<Props> = ({
     };
   }, [
     aovKpi,
+    selectedRegion,
+    selectedMonth,
     ordersKpi,
-    periodInfo.hasRange,
     periodMonths,
     prevMonths,
     revenueKpi,
-    scope,
     rawRows,
   ]);
 
   // ========= 下方表格（Region / Platform breakdown） =========
   const breakdownRows: BreakdownRow[] = useMemo(() => {
-    if (!periodInfo.hasRange || !periodMonths.length) {
-      return [];
-    }
+    if (!periodMonths.length) return [];
 
-    const allRegions = Array.from(
-      new Set(rawRows.map((r) => r.region)),
+    const groups = Array.from(
+      new Set(
+        rawRows
+          .filter((r) => r.region === selectedRegion)
+          .map((r) => r.platform),
+      ),
     ).sort();
-
-    const allPlatformsForScope =
-      scope === 'overview'
-        ? []
-        : Array.from(
-            new Set(
-              rawRows
-                .filter((r) => r.region === scope)
-                .map((r) => r.platform),
-            ),
-          ).sort();
-
-    const groups = isOverview ? allRegions : allPlatformsForScope;
 
     const rows: BreakdownRow[] = [];
 
     for (const key of groups) {
-      const filterFn = (row: SalesRow) => {
-        if (isOverview) return row.region === key;
-        return row.region === scope && row.platform === key;
-      };
+      const filterFn = (row: SalesRow) => row.region === selectedRegion && row.platform === key;
 
       const currAgg = sumForMonths(periodMonths, filterFn);
       const prevAgg = sumForMonths(prevMonths, filterFn);
@@ -354,13 +276,11 @@ export const ExecutiveSummary: React.FC<Props> = ({
     return rows;
   }, [
     activeMetric,
-    isOverview,
-    periodInfo.hasRange,
     periodMonths,
     prevMonths,
     yoyMonths,
     rawRows,
-    scope,
+    selectedRegion,
   ]);
 
   // ========= 文案 + formatter =========
@@ -391,21 +311,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
 
   const activeFormatter = metricConfig[activeMetric].formatter;
 
-  const regionTitleMap: Record<MetricKey, { en: string; zh: string }> = {
-    revenue: {
-      en: 'Regional breakdown — Total revenue',
-      zh: '區域拆分 — 總營收',
-    },
-    orders: {
-      en: 'Regional breakdown — Total orders',
-      zh: '區域拆分 — 訂單數',
-    },
-    aov: {
-      en: 'Regional breakdown — Global AOV',
-      zh: '區域拆分 — 客單價',
-    },
-  };
-
   const platformTitleMap: Record<MetricKey, { en: string; zh: string }> = {
     revenue: {
       en: 'Platform breakdown — Total revenue',
@@ -421,45 +326,19 @@ export const ExecutiveSummary: React.FC<Props> = ({
     },
   };
 
-  const firstColumnLabel = isOverview
-    ? isZh
-      ? '區域'
-      : 'Region'
-    : isZh
-    ? '平台'
-    : 'Platform';
+  const firstColumnLabel = isZh ? '平台' : 'Platform';
 
-  const cardTitle = isOverview
-    ? isZh
-      ? regionTitleMap[activeMetric].zh
-      : regionTitleMap[activeMetric].en
-    : isZh
+  const cardTitle = isZh
     ? platformTitleMap[activeMetric].zh
     : platformTitleMap[activeMetric].en;
-
-  const rangeSelectStyle: React.CSSProperties = {
-    background: 'rgba(15,23,42,0.95)',
-    borderRadius: 999,
-    border: '1px solid rgba(75,85,99,0.9)',
-    color: '#e5e7eb',
-    fontSize: 11,
-    padding: '4px 8px',
-    marginLeft: 6,
-  };
 
   const effectiveRevenueKpi = cardKpis.revenue;
   const effectiveOrdersKpi = cardKpis.orders;
   const effectiveAovKpi = cardKpis.aov;
 
-  const scopeLabel = (s: Scope) => {
-    if (!isZh) return s === 'overview' ? 'Overview' : s;
-    if (s === 'overview') return '總覽';
-    return s;
-  };
-
   return (
     <div className="exec-wrapper">
-      {/* ===== 上方 bar：Scope + 時間篩選 ===== */}
+      {/* ===== 上方 bar：顯示目前範圍 ===== */}
       <div
         style={{
           display: 'flex',
@@ -470,74 +349,14 @@ export const ExecutiveSummary: React.FC<Props> = ({
           flexWrap: 'wrap',
         }}
       >
-        {/* Scope toggle */}
-        <div className="scope-toggle">
-          {(['overview', 'BC', 'ON', 'CA'] as Scope[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={
-                'scope-pill' + (scope === s ? ' scope-pill-active' : '')
-              }
-              onClick={() => setScope(s)}
-            >
-              {scopeLabel(s)}
-            </button>
-          ))}
-        </div>
-
-        {/* 時間篩選器 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            fontSize: 11,
-            color: '#9ca3af',
-          }}
-        >
-          <span>{isZh ? '分析區間' : 'Analysis period'}</span>
-          <select
-            style={rangeSelectStyle}
-            value={rangeStart ?? ''}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (!value) return;
-              const startIdx = allMonths.indexOf(value);
-              const endIdx = rangeEnd ? allMonths.indexOf(rangeEnd) : -1;
-              if (endIdx !== -1 && startIdx > endIdx) {
-                setRangeEnd(value);
-              }
-              setRangeStart(value);
-            }}
-          >
-            {allMonths.map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
-          <span>~</span>
-          <select
-            style={rangeSelectStyle}
-            value={rangeEnd ?? ''}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (!value) return;
-              const endIdx = allMonths.indexOf(value);
-              const startIdx = rangeStart ? allMonths.indexOf(rangeStart) : -1;
-              if (startIdx !== -1 && endIdx < startIdx) {
-                setRangeStart(value);
-              }
-              setRangeEnd(value);
-            }}
-          >
-            {allMonths.map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="scope-pill scope-pill-active">{selectedRegion}</span>
+          <span className="scope-pill">{periodInfo.currentLabel}</span>
+          {prevMonthSelection && (
+            <span className="scope-pill" style={{ opacity: 0.9 }}>
+              {isZh ? '對比 ' : 'vs '} {monthLabel(prevMonthSelection)}
+            </span>
+          )}
         </div>
       </div>
 
@@ -555,9 +374,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
           </div>
           <div className="kpi-sub">
             {isZh ? '對比' : 'vs'}{' '}
-            {periodInfo.hasRange && periodInfo.prevMonths.length
-              ? periodInfo.previousLabel
-              : monthLabel(prevMonth)}
+            {periodInfo.previousLabel}
             {' · '}
             <span className={getDeltaClass(effectiveRevenueKpi.mom)}>
               {formatPercent(effectiveRevenueKpi.mom)}
@@ -577,9 +394,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
           </div>
           <div className="kpi-sub">
             {isZh ? '對比' : 'vs'}{' '}
-            {periodInfo.hasRange && periodInfo.prevMonths.length
-              ? periodInfo.previousLabel
-              : monthLabel(prevMonth)}
+            {periodInfo.previousLabel}
             {' · '}
             <span className={getDeltaClass(effectiveOrdersKpi.mom)}>
               {formatPercent(effectiveOrdersKpi.mom)}
@@ -597,9 +412,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
           </div>
           <div className="kpi-sub">
             {isZh ? '對比' : 'vs'}{' '}
-            {periodInfo.hasRange && periodInfo.prevMonths.length
-              ? periodInfo.previousLabel
-              : monthLabel(prevMonth)}
+            {periodInfo.previousLabel}
             {' · '}
             <span className={getDeltaClass(effectiveAovKpi.mom)}>
               {formatPercent(effectiveAovKpi.mom)}
@@ -614,24 +427,9 @@ export const ExecutiveSummary: React.FC<Props> = ({
           <div>
             <div className="region-title">{cardTitle}</div>
             <div className="region-subtitle">
-              {periodInfo.hasRange
-                ? `${isZh ? '當前區間：' : 'Current: '} ${
-                    periodInfo.currentLabel
-                  } · ${
-                    isZh ? '前一區間：' : 'Prev: '
-                  } ${periodInfo.previousLabel}`
-                : `${isZh ? '當月：' : 'Current: '} ${monthLabel(
-                    currentMonth,
-                  )} · ${isZh ? '前一月：' : 'Prev: '} ${monthLabel(
-                    prevMonth,
-                  )}`}
-              {!isOverview && (
-                <>
-                  {' · '}
-                  {isZh ? '區域：' : 'Region: '}
-                  {scope}
-                </>
-              )}
+              {`${isZh ? '當月：' : 'Current: '} ${periodInfo.currentLabel} · ${
+                isZh ? '前一月：' : 'Prev: '
+              } ${periodInfo.previousLabel} · ${isZh ? '區域：' : 'Region: '} ${selectedRegion}`}
             </div>
           </div>
 
