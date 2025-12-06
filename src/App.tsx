@@ -4,6 +4,10 @@ import './App.css';
 import { useDashboardData } from './hooks/useDashboardData';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PlatformMatrix } from './components/PlatformMatrix';
+import { RegionHeatmap } from './components/RegionHeatmap';
+import { StoreHeatmap } from './components/StoreHeatmap';
+import { RevenueTrend } from './components/RevenueTrend';
+import { RegionComparison } from './components/RegionComparison';
 
 export type Lang = 'en' | 'zh';
 export type Scope = 'BC' | 'ON' | 'CA';
@@ -26,9 +30,9 @@ function App() {
     allMonths,
     rawRows,
   } = useDashboardData();
+
   const [selectedRegion, setSelectedRegion] = useState<Scope>('BC');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
-
   const [language, setLanguage] = useState<Lang>('en');
   const isZh = language === 'zh';
 
@@ -157,86 +161,89 @@ function App() {
         )}
 
         {/* ===== Main Dashboard ===== */}
-        {!loading && !error && revenueKpi && ordersKpi && aovKpi && selectedMonth && (
-          <main className="dashboard-grid">
-            {/* 1️⃣ KPI + Regional / Platform summary */}
-            <section className="section-card section-kpi">
-              <ExecutiveSummary
-                language={language}
-                selectedRegion={selectedRegion}
-                selectedMonth={selectedMonth}
-                currentMonth={currentMonth}
-                prevMonth={prevMonth}
-                revenueKpi={revenueKpi}
-                ordersKpi={ordersKpi}
-                aovKpi={aovKpi}
-                regionalRevenueKpis={regionalRevenueKpis}
-                regionalOrdersKpis={regionalOrdersKpis}
-                regionalAovKpis={regionalAovKpis}
-                platformRevenueKpis={platformRevenueKpis}
-                platformOrdersKpis={platformOrdersKpis}
-                platformAovKpis={platformAovKpis}
-                allMonths={allMonths}
-                rawRows={rawRows}
-              />
-            </section>
+        {!loading &&
+          !error &&
+          revenueKpi &&
+          ordersKpi &&
+          aovKpi &&
+          selectedMonth && (
+            <main className="dashboard-grid">
+              {/* 1️⃣ KPI + Regional / Platform summary */}
+              <section className="section-card section-kpi">
+                <ExecutiveSummary
+                  language={language}
+                  selectedRegion={selectedRegion}
+                  selectedMonth={selectedMonth}
+                  currentMonth={currentMonth}
+                  prevMonth={prevMonth}
+                  revenueKpi={revenueKpi}
+                  ordersKpi={ordersKpi}
+                  aovKpi={aovKpi}
+                  regionalRevenueKpis={regionalRevenueKpis}
+                  regionalOrdersKpis={regionalOrdersKpis}
+                  regionalAovKpis={regionalAovKpis}
+                  platformRevenueKpis={platformRevenueKpis}
+                  platformOrdersKpis={platformOrdersKpis}
+                  platformAovKpis={platformAovKpis}
+                  allMonths={allMonths}
+                  rawRows={rawRows}
+                />
+              </section>
 
-            {/* 2️⃣ Platform Velocity Matrix */}
-            <section className="section-card">
-              <PlatformMatrix
-                language={language}
-                selectedRegion={selectedRegion}
-                selectedMonth={selectedMonth}
-              />
-            </section>
+              {/* 2️⃣ Platform Velocity Matrix */}
+              <section className="section-card">
+                <PlatformMatrix
+                  language={language}
+                  selectedRegion={selectedRegion}
+                  selectedMonth={selectedMonth}
+                />
+              </section>
 
-                language={language}
-                selectedRegion={selectedRegion}
-                selectedMonth={selectedMonth}
-              />
-            </section>
+              {/* 3️⃣ Revenue MoM Heatmap（Region + Store Drilldown） */}
+              <section className="section-card section-heatmap">
+                <h2 className="section-title">
+                  {isZh ? '營收月成長 Heatmap' : 'Revenue MoM Heatmap'}
+                </h2>
+                <p className="section-subtitle">
+                  {isZh
+                    ? '上：各區 MoM 表現；下：選定區域的門店明細。'
+                    : 'Top: Region-level MoM performance. Bottom: Store-level breakdown.'}
+                </p>
 
-            {/* 3️⃣ Revenue MoM Heatmap（Region + Store Drilldown） */}
-            <section className="section-card section-heatmap">
-              <h2 className="section-title">
-                {isZh ? '營收月成長 Heatmap' : 'Revenue MoM Heatmap'}
-              </h2>
-              <p className="section-subtitle">
-                {isZh
-                  ? '上：各區 MoM 表現；下：選定區域的門店明細。'
-                  : 'Top: Region-level MoM performance. Bottom: Store-level breakdown.'}
-              </p>
+                <RegionHeatmap
+                  language={language}
+                  selectedRegion={selectedRegion}
+                  selectedMonth={selectedMonth}
+                  onSelectRegion={setSelectedRegion}
+                />
+                <div className="heatmap-divider" />
+                <StoreHeatmap
+                  language={language}
+                  selectedRegion={selectedRegion}
+                  selectedMonth={selectedMonth}
+                />
+              </section>
 
-              <RegionHeatmap
-                language={language}
-                selectedRegion={selectedRegion}
-                selectedMonth={selectedMonth}
-                onSelectRegion={setSelectedRegion}
-              />
-              <div className="heatmap-divider" />
-              <StoreHeatmap
-                language={language}
-                selectedRegion={selectedRegion}
-                selectedMonth={selectedMonth}
-              />
-            </section>
+              {/* 4️⃣ Revenue Trend & Region Comparison */}
+              <section className="section-card section-charts">
+                <RevenueTrend
+                  selectedRegion={selectedRegion}
+                  selectedMonth={selectedMonth}
+                />
+              </section>
 
-            {/* 4️⃣ Revenue Trend & Region Comparison */}
-            <section className="section-card section-charts">
-              <RevenueTrend selectedRegion={selectedRegion} selectedMonth={selectedMonth} />
-            </section>
-
-            <section className="section-card section-charts">
-              <RegionComparison
-                selectedRegion={selectedRegion}
-                selectedMonth={selectedMonth}
-              />
-            </section>
-          </main>
-        )}
+              <section className="section-card section-charts">
+                <RegionComparison
+                  selectedRegion={selectedRegion}
+                  selectedMonth={selectedMonth}
+                />
+              </section>
+            </main>
+          )}
       </div>
     </div>
   );
 }
 
 export default App;
+
