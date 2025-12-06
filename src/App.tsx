@@ -4,10 +4,6 @@ import './App.css';
 import { useDashboardData } from './hooks/useDashboardData';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PlatformMatrix } from './components/PlatformMatrix';
-import { RegionHeatmap } from './components/RegionHeatmap';
-import { StoreHeatmap } from './components/StoreHeatmap';
-import { RevenueTrend } from './components/RevenueTrend';
-import { RegionComparison } from './components/RegionComparison';
 
 export type Lang = 'en' | 'zh';
 export type Scope = 'BC' | 'ON' | 'CA';
@@ -160,7 +156,7 @@ function App() {
           </div>
         )}
 
-        {/* ===== Main Dashboard ===== */}
+        {/* ===== Main Dashboard (only 2 sections kept) ===== */}
         {!loading &&
           !error &&
           revenueKpi &&
@@ -194,46 +190,6 @@ function App() {
               <section className="section-card">
                 <PlatformMatrix
                   language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                />
-              </section>
-
-              {/* 3️⃣ Revenue MoM Heatmap（Region + Store Drilldown） */}
-              <section className="section-card section-heatmap">
-                <h2 className="section-title">
-                  {isZh ? '營收月成長 Heatmap' : 'Revenue MoM Heatmap'}
-                </h2>
-                <p className="section-subtitle">
-                  {isZh
-                    ? '上：各區 MoM 表現；下：選定區域的門店明細。'
-                    : 'Top: Region-level MoM performance. Bottom: Store-level breakdown.'}
-                </p>
-
-                <RegionHeatmap
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                  onSelectRegion={setSelectedRegion}
-                />
-                <div className="heatmap-divider" />
-                <StoreHeatmap
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                />
-              </section>
-
-              {/* 4️⃣ Revenue Trend & Region Comparison */}
-              <section className="section-card section-charts">
-                <RevenueTrend
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                />
-              </section>
-
-              <section className="section-card section-charts">
-                <RegionComparison
                   selectedRegion={selectedRegion}
                   selectedMonth={selectedMonth}
                 />
