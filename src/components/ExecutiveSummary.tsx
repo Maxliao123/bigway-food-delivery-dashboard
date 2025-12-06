@@ -10,7 +10,7 @@ type Kpi = {
 };
 
 type RegionalKpi = {
-  region: string; // BC / CA / ON
+  region: string;
   current: number;
   previous: number | null;
   mom: number | null;
@@ -28,13 +28,9 @@ type Props = {
   regionalRevenueKpis?: RegionalKpi[];
   regionalOrdersKpis?: RegionalKpi[];
   regionalAovKpis?: RegionalKpi[];
-
-  // 先保留（目前計算已不用它們）
   platformRevenueKpis?: PlatformKpi[];
   platformOrdersKpis?: PlatformKpi[];
   platformAovKpis?: PlatformKpi[];
-
-  // 任意時間區間計算用
   allMonths: string[];
   rawRows: SalesRow[];
 };
@@ -42,12 +38,12 @@ type Props = {
 type MetricKey = 'revenue' | 'orders' | 'aov';
 
 type BreakdownRow = {
-  key: string; // Platform
+  key: string; // platform name
   current: number;
   share: number | null;
   previous: number | null;
   mom: number | null;
-  yoy: number | null; // 保留計算，但目前不顯示
+  yoy: number | null;
 };
 
 type SortKey = 'current' | 'share' | 'previous' | 'mom';
@@ -64,7 +60,7 @@ type PlatformTrendChartProps = {
   isZh: boolean;
 };
 
-// ========= formatter =========
+// ========= formatters =========
 const formatCurrency = (value: number | null | undefined) => {
   if (value == null) return '—';
   return `$${Math.round(value).toLocaleString()}`;
@@ -95,9 +91,9 @@ const getDeltaClass = (value: number | null | undefined) => {
 
 /**
  * 近三個月平台趨勢折線圖
- * - 高度壓低一點（height 170）
- * - 數字標籤使用 valueFormatter（營收/客單價含 $，不再用 k 簡寫）
- * - 會自動判斷標籤要畫在點上方或下方，避免被裁切
+ * - 使用 min/max + padding 當 Y 軸範圍，避免線段全貼上緣
+ * - 加 5 條 grid 線，讓高度區分更清楚
+ * - 避免同一個月份的數字標籤互相重疊
  */
 const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
   series,
@@ -114,8 +110,9 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
     );
   }
 
-  const flatValues = series.flatMap((s) => s.points.map((p) => p.value));
-  const maxValue = Math.max(...flatValues, 0);
+  const allValues = series.flatMap((s) => s.points.map((p) => p.value));
+  const maxValue = Math.max(...allValues, 0);
+  const minValue = Math.min(...allValues);
 
   if (maxValue <= 0) {
     return (
@@ -125,10 +122,31 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
     );
   }
 
-  // ⭐ 調整圖表比例與邊界
+  // ==== Y 軸範圍：用 min/max 加 padding，讓線段置中一些 ====
+  let domainMin = minValue;
+  let domainMax = maxValue;
+
+  if (domainMin === domainMax) {
+    // 只有一個值時給一點上下 padding
+    const padding = domainMax === 0 ? 1 : Math.abs(domainMax) * 0.1;
+    domainMin -= padding;
+    domainMax += padding;
+  } else {
+    const span = domainMax - domainMin;
+    const padding = span * 0.2; // 上下各留 20%
+    domainMin -= padding;
+    domainMax += padding;
+  }
+
+  // 不用強制 >= 0，因為訂單 / 營收不會是負的，AOV 也自然 > 0
+  // 但如果算出來 domainMin > domainMax（理論上不會），保底一下
+  if (domainMax <= domainMin) {
+    domainMax = domainMin + 1;
+  }
+
   const width = 430;
   const height = 170;
-  const margin = { top: 10, right: 34, bottom: 32, left: 40 }; // ← 加大右邊 margin
+  const margin = { top: 10, right: 34, bottom: 32, left: 40 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
 
@@ -139,38 +157,34 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
     margin.left + (months.length === 1 ? chartWidth / 2 : xStep * idx);
 
   const getY = (value: number) => {
-    if (maxValue === 0) return margin.top + chartHeight;
-    const ratio = value / maxValue;
+    const clamped = Math.max(domainMin, Math.min(domainMax, value));
+    const ratio = (clamped - domainMin) / (domainMax - domainMin);
     return margin.top + chartHeight - ratio * chartHeight;
   };
 
   const COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
 
-  // ⭐ 避免數字重疊的暫存陣列
+  // 避免同一個 x 位置上標籤互相重疊
   const usedLabelY: Record<number, number[]> = {};
 
   const avoidOverlap = (xIndex: number, proposedY: number) => {
     if (!usedLabelY[xIndex]) usedLabelY[xIndex] = [];
-
     const taken = usedLabelY[xIndex];
 
     let finalY = proposedY;
-
     for (const y of taken) {
       if (Math.abs(finalY - y) < 14) {
-        // 下移避免重疊
         finalY += 14;
       }
     }
-
-    usedLabelY[xIndex].push(finalY);
+    taken.push(finalY);
     return finalY;
   };
 
   return (
     <div className="platform-trend-chart">
       <svg viewBox={`0 0 ${width} ${height}`} role="img">
-        {/* Grid + Axis */}
+        {/* Y 軸 */}
         <line
           x1={margin.left}
           y1={margin.top}
@@ -179,6 +193,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
           stroke="rgba(255,255,255,0.06)"
           strokeWidth={1}
         />
+        {/* X 軸 */}
         <line
           x1={margin.left}
           y1={margin.top + chartHeight}
@@ -188,7 +203,8 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
           strokeWidth={1}
         />
 
-        {[0.33, 0.66, 1].map((r) => {
+        {/* 5 條水平 grid 線，提高高度區分感 */}
+        {[0.2, 0.4, 0.6, 0.8, 1].map((r) => {
           const y = margin.top + chartHeight - r * chartHeight;
           return (
             <line
@@ -203,7 +219,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
           );
         })}
 
-        {/* X 軸月份文字 */}
+        {/* X 軸月份標籤 */}
         {months.map((m, idx) => (
           <text
             key={m}
@@ -217,7 +233,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
           </text>
         ))}
 
-        {/* 每條折線 + 點 + 標籤 */}
+        {/* 線條 + 點 + 數字標籤 */}
         {series.map((s, si) => {
           const color = COLORS[si % COLORS.length];
 
@@ -246,8 +262,6 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
 
                 let labelY = y - 8;
                 if (labelY < margin.top + 6) labelY = y + 12;
-
-                // ⭐ 避免交疊
                 const adjustedY = avoidOverlap(idx, labelY);
 
                 return (
@@ -277,6 +291,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
         })}
       </svg>
 
+      {/* Legend */}
       <div className="platform-trend-legend">
         {series.map((s, si) => (
           <div key={s.platform} className="platform-trend-legend-item">
@@ -291,7 +306,6 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
     </div>
   );
 };
-
 
 export const ExecutiveSummary: React.FC<Props> = ({
   language,
@@ -313,18 +327,15 @@ export const ExecutiveSummary: React.FC<Props> = ({
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const isZh = language === 'zh';
-  const isOverview = false;
 
   const monthLabel = (iso: string | null) => {
     if (!iso) return '—';
-    const short = iso.slice(0, 7); // "YYYY-MM"
+    const short = iso.slice(0, 7);
     const [year, month] = short.split('-');
     const mNum = Number(month);
     if (!year || !mNum || Number.isNaN(mNum)) return short;
 
-    if (isZh) {
-      return `${year}年${month}月`;
-    }
+    if (isZh) return `${year}年${month}月`;
 
     const MONTHS = [
       'Jan',
@@ -342,11 +353,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
     ];
     return `${MONTHS[mNum - 1]} ${year}`;
   };
-
-  // ========= 原 regional arrays（現在主要用在空資料 fallback） =========
-  const revenueRegions = regionalRevenueKpis || [];
-  const ordersRegions = regionalOrdersKpis || [];
-  const aovRegions = regionalAovKpis || [];
 
   const selectedIndex = useMemo(
     () => allMonths.findIndex((m) => m === selectedMonth),
@@ -393,7 +399,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
     [isZh, prevMonthSelection, selectedMonth],
   );
 
-  // ========= 加總工具 =========
   const sumForMonths = (
     months: string[],
     predicate: (row: SalesRow) => boolean,
@@ -411,7 +416,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
     return { revenue, orders };
   };
 
-  // ========= 上方 KPI（總營收 / 總訂單 / Global AOV） =========
+  // ======= KPI（上方三張卡片）=======
   const cardKpis = useMemo(() => {
     if (!selectedMonth) {
       return {
@@ -453,7 +458,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
     rawRows,
   ]);
 
-  // ========= 下方表格（Platform breakdown） =========
+  // ======= 下方平台表格 =======
   const breakdownRows: BreakdownRow[] = useMemo(() => {
     if (!periodMonths.length) return [];
 
@@ -498,22 +503,21 @@ export const ExecutiveSummary: React.FC<Props> = ({
       rows.push({
         key,
         current: currVal,
-        share: null, // 先佔位，下面統一算
+        share: null,
         previous: prevVal,
         mom,
         yoy,
       });
     }
 
-    const totalCurrent = rows.reduce((sum, row) => sum + row.current, 0);
-
+    const totalCurrent = rows.reduce((sum, r) => sum + r.current, 0);
     if (totalCurrent <= 0) {
-      return rows.map((row) => ({ ...row, share: null }));
+      return rows.map((r) => ({ ...r, share: null }));
     }
 
-    return rows.map((row) => ({
-      ...row,
-      share: row.current / totalCurrent,
+    return rows.map((r) => ({
+      ...r,
+      share: r.current / totalCurrent,
     }));
   }, [
     activeMetric,
@@ -524,7 +528,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
     selectedRegion,
   ]);
 
-  // ========= 近三個月各平台趨勢 =========
+  // ======= 近三個月趨勢資料 =======
   const platformTrendSeries: TrendSeries[] = useMemo(() => {
     if (!periodMonths.length) return [];
 
@@ -578,20 +582,17 @@ export const ExecutiveSummary: React.FC<Props> = ({
     return series;
   }, [activeMetric, periodMonths, rawRows, selectedRegion]);
 
-  // 排序後的 rows
+  // ======= 排序 =======
   const sortedBreakdownRows = useMemo(() => {
     const rows = [...breakdownRows];
-
     const dirFactor = sortDir === 'asc' ? 1 : -1;
 
     rows.sort((a, b) => {
       const va = a[sortKey];
       const vb = b[sortKey];
-
       if (va == null && vb == null) return 0;
-      if (va == null) return 1; // null 一律排在後面
+      if (va == null) return 1;
       if (vb == null) return -1;
-
       if (va === vb) return 0;
       return va > vb ? dirFactor : -dirFactor;
     });
@@ -604,7 +605,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(key);
-      setSortDir('desc'); // 預設新欄位先用 desc
+      setSortDir('desc');
     }
   };
 
@@ -634,14 +635,10 @@ export const ExecutiveSummary: React.FC<Props> = ({
     );
   };
 
-  // ========= 文案 + formatter =========
+  // ===== 文案 / formatter 設定 =====
   const metricConfig: Record<
     MetricKey,
-    {
-      labelEn: string;
-      labelZh: string;
-      formatter: (v: number | null | undefined) => string;
-    }
+    { labelEn: string; labelZh: string; formatter: (v: number | null | undefined) => string }
   > = {
     revenue: {
       labelEn: 'Total Revenue',
@@ -678,7 +675,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
   };
 
   const firstColumnLabel = isZh ? '平台' : 'Platform';
-
   const cardTitle = isZh
     ? platformTitleMap[activeMetric].zh
     : platformTitleMap[activeMetric].en;
@@ -689,7 +685,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
 
   return (
     <div className="exec-wrapper">
-      {/* ===== 上方 bar：顯示目前範圍 ===== */}
+      {/* 範圍標籤 */}
       <div
         style={{
           display: 'flex',
@@ -711,9 +707,8 @@ export const ExecutiveSummary: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* ===== KPI Row ===== */}
+      {/* KPI cards */}
       <div className="kpi-grid">
-        {/* Revenue */}
         <div className="kpi-card" onClick={() => setActiveMetric('revenue')}>
           <div className="kpi-title">
             {isZh
@@ -732,12 +727,9 @@ export const ExecutiveSummary: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Orders */}
         <div className="kpi-card" onClick={() => setActiveMetric('orders')}>
           <div className="kpi-title">
-            {isZh
-              ? metricConfig.orders.labelZh
-              : metricConfig.orders.labelEn}
+            {isZh ? metricConfig.orders.labelZh : metricConfig.orders.labelEn}
           </div>
           <div className="kpi-value">
             {formatNumber(effectiveOrdersKpi.current)}
@@ -751,7 +743,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* AOV */}
         <div className="kpi-card" onClick={() => setActiveMetric('aov')}>
           <div className="kpi-title">
             {isZh ? metricConfig.aov.labelZh : metricConfig.aov.labelEn}
@@ -769,13 +760,13 @@ export const ExecutiveSummary: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* ===== Platform Breakdown ===== */}
+      {/* 下方平台拆分 + 趨勢 */}
       <div className="region-card">
         <div className="region-header">
           <div>
             <div className="region-title">{cardTitle}</div>
             <div className="region-subtitle">
-              {`${isZh ? '當月：' : 'Current: '} ${
+              {`${isZh ? '當前：' : 'Current: '} ${
                 periodInfo.currentLabel
               } · ${isZh ? '前一月：' : 'Prev: '} ${
                 periodInfo.previousLabel
@@ -818,8 +809,9 @@ export const ExecutiveSummary: React.FC<Props> = ({
           <table className="region-table">
             <thead>
               <tr>
-                <th style={{ textAlign: 'left' }}>{firstColumnLabel}</th>
-
+                <th style={{ textAlign: 'left' }}>
+                  {isZh ? '平台' : 'Platform'}
+                </th>
                 <th style={{ textAlign: 'right' }}>
                   <button
                     type="button"
@@ -838,7 +830,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
                     {renderSortIcon('current')}
                   </button>
                 </th>
-
                 <th style={{ textAlign: 'right' }}>
                   <button
                     type="button"
@@ -859,7 +850,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
                     {renderSortIcon('share')}
                   </button>
                 </th>
-
                 <th style={{ textAlign: 'right' }}>
                   <button
                     type="button"
@@ -878,7 +868,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
                     {renderSortIcon('previous')}
                   </button>
                 </th>
-
                 <th style={{ textAlign: 'right' }}>
                   <button
                     type="button"
@@ -899,7 +888,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
                 </th>
               </tr>
             </thead>
-
             <tbody>
               {sortedBreakdownRows.map((row) => (
                 <tr key={row.key}>
@@ -932,7 +920,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
                   </td>
                 </tr>
               ))}
-
               {sortedBreakdownRows.length === 0 && (
                 <tr>
                   <td
@@ -947,7 +934,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
           </table>
         </div>
 
-        {/* 近三個月平台趨勢折線圖 */}
+        {/* 近三個月趨勢折線圖 */}
         {platformTrendSeries.length > 0 && (
           <div className="platform-trend-section">
             <div className="platform-trend-header">
@@ -960,7 +947,9 @@ export const ExecutiveSummary: React.FC<Props> = ({
                 {isZh
                   ? `地區：${selectedRegion} · 期間：${monthLabel(
                       periodMonths[0],
-                    )} – ${monthLabel(periodMonths[periodMonths.length - 1])}`
+                    )} – ${monthLabel(
+                      periodMonths[periodMonths.length - 1],
+                    )}`
                   : `Region: ${selectedRegion} · Period: ${monthLabel(
                       periodMonths[0],
                     )} – ${monthLabel(
