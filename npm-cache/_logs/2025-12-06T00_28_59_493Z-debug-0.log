@@ -1,0 +1,36 @@
+0 verbose cli /usr/local/bin/node /usr/local/bin/npm
+1 info using npm@10.9.3
+2 info using node@v22.19.0
+3 silly config load:file:/usr/local/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/liaoyikai/food-delivery-dashboard/.npmrc
+5 silly config load:file:/Users/liaoyikai/.npmrc
+6 silly config load:file:/Users/liaoyikai/.npm-global/etc/npmrc
+7 verbose title npm install # 如果很久沒裝 / 換過電腦就跑一下
+8 verbose argv "install" "#" "如果很久沒裝" "/" "換過電腦就跑一下"
+9 verbose logfile logs-max:10 dir:/Users/liaoyikai/food-delivery-dashboard/npm-cache/_logs/2025-12-06T00_28_59_493Z-
+10 verbose logfile /Users/liaoyikai/food-delivery-dashboard/npm-cache/_logs/2025-12-06T00_28_59_493Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:2197815296 maxSize:549453824 maxEntrySize:274726912
+13 verbose stack Error: Invalid tag name "#" of package "#": Tags may not have any characters that encodeURIComponent encodes.
+13 verbose stack     at invalidTagName (/usr/local/lib/node_modules/npm/node_modules/npm-package-arg/lib/npa.js:143:15)
+13 verbose stack     at fromRegistry (/usr/local/lib/node_modules/npm/node_modules/npm-package-arg/lib/npa.js:471:13)
+13 verbose stack     at resolve (/usr/local/lib/node_modules/npm/node_modules/npm-package-arg/lib/npa.js:114:12)
+13 verbose stack     at npa (/usr/local/lib/node_modules/npm/node_modules/npm-package-arg/lib/npa.js:56:10)
+13 verbose stack     at /usr/local/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:507:18
+13 verbose stack     at Array.map (<anonymous>)
+13 verbose stack     at #add (/usr/local/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:504:27)
+13 verbose stack     at #applyUserRequestsToNode (/usr/local/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:473:22)
+13 verbose stack     at #applyUserRequests (/usr/local/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:408:42)
+13 verbose stack     at Arborist.buildIdealTree (/usr/local/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:180:36)
+14 error code EINVALIDTAGNAME
+15 error Invalid tag name "#" of package "#": Tags may not have any characters that encodeURIComponent encodes.
+16 silly unfinished npm timer reify 1764980939879
+17 silly unfinished npm timer reify:loadTrees 1764980939879
+18 silly unfinished npm timer idealTree:userRequests 1764980939916
+19 verbose cwd /Users/liaoyikai/food-delivery-dashboard
+20 verbose os Darwin 24.6.0
+21 verbose node v22.19.0
+22 verbose npm  v10.9.3
+23 verbose exit 1
+24 verbose code 1
+25 error A complete log of this run can be found in: /Users/liaoyikai/food-delivery-dashboard/npm-cache/_logs/2025-12-06T00_28_59_493Z-debug-0.log

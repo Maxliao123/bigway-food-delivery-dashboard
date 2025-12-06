@@ -1,0 +1,435 @@
+/* 確保整個 App 佔滿畫面，避免被其它檔案的 #root 限制住 */
+#root {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ===== Global layout (Sonoma-ish Dark, 收斂版) ===== */
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #020617;
+  background-image: radial-gradient(circle at top left, #0b1120 0, #020617 40%, #000 100%);
+  color: #e5e7eb;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+    sans-serif;
+}
+
+/* App outer shell */
+.app-root {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 40px 0;
+  width: 100%;
+}
+
+/* 整個 Dashboard 內容容器 */
+.app-shell {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+
+/* 讓 Header + Dashboard 在寬螢幕下也置中 */
+.app-header,
+.dashboard-grid {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* ===== Header ===== */
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.app-badge {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #9ca3af;
+  margin: 0 0 4px 0;
+}
+
+.app-title {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.app-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+/* Scope toggle (Overview / BC / ON / CA) */
+.scope-toggle {
+  margin-top: 12px;
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(75, 85, 99, 0.9);
+}
+
+.scope-pill {
+  border: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 13px;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.scope-pill-active {
+  background: radial-gradient(circle at top, #1d4ed8, #0ea5e9);
+  color: #f9fafb;
+  transform: translateY(-1px);
+}
+
+.app-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-meta-pill {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: linear-gradient(
+    120deg,
+    rgba(30, 64, 175, 0.35),
+    rgba(12, 74, 110, 0.5)
+  );
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.8);
+}
+
+/* ===== Language toggle ===== */
+
+.lang-toggle {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 2px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.lang-button {
+  border: none;
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 999px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.lang-button-active {
+  background: linear-gradient(120deg, #1d4ed8, #0ea5e9);
+  color: #f9fafb;
+}
+
+/* ===== Status states ===== */
+
+.status {
+  font-size: 13px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(16px);
+}
+
+.status-loading {
+  color: #e5e7eb;
+}
+
+.status-error {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.8);
+}
+
+/* ===== Dashboard grid ===== */
+
+.dashboard-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 40px;
+}
+
+/* Generic section card */
+.section-card {
+  border-radius: 18px;
+  padding: 20px 20px 22px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(31, 41, 55, 0.9);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(20px);
+}
+
+.section-kpi {
+  padding-top: 22px;
+}
+
+.section-heatmap {
+  padding-top: 22px;
+}
+
+.section-charts {
+  padding-top: 18px;
+}
+
+/* Divider between region & store heatmap */
+.heatmap-divider {
+  height: 1px;
+  margin: 16px 0 12px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(148, 163, 184, 0.45),
+    transparent
+  );
+}
+
+/* ===== Executive Summary (KPI) ===== */
+
+.exec-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* KPI cards row */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+/* single card */
+.kpi-card {
+  padding: 16px 16px 14px;
+  border-radius: 16px;
+  background: radial-gradient(
+      circle at top left,
+      rgba(37, 99, 235, 0.2),
+      rgba(15, 23, 42, 0.98)
+    );
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(18px);
+  transition: transform 0.15s ease, box-shadow 0.15s ease,
+    border-color 0.15s ease;
+  cursor: pointer;
+}
+
+.kpi-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.9);
+  border-color: rgba(191, 219, 254, 0.9);
+}
+
+/* KPI title */
+.kpi-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #cbd5f5;
+  margin-bottom: 4px;
+}
+
+/* KPI main value */
+.kpi-value {
+  font-size: 26px;
+  font-weight: 600;
+  background: linear-gradient(120deg, #e5e7eb, #dbeafe);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+/* KPI sub line */
+.kpi-sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* positive / negative colouring */
+.kpi-pos {
+  color: #4ade80;
+}
+
+.kpi-neg {
+  color: #f97373;
+}
+
+/* ===== Region / Platform breakdown block ===== */
+
+.region-card {
+  margin-top: 4px;
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  background: radial-gradient(
+      circle at top,
+      rgba(15, 23, 42, 0.96),
+      rgba(15, 23, 42, 1)
+    );
+  border: 1px solid rgba(55, 65, 81, 0.95);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.9);
+}
+
+.region-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.region-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #d1d5db;
+}
+
+.region-subtitle {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* Metric tabs */
+.metric-tabs {
+  display: inline-flex;
+  background: rgba(15, 23, 42, 0.9);
+  border-radius: 999px;
+  padding: 2px;
+  border: 1px solid rgba(75, 85, 99, 0.9);
+}
+
+.metric-tab {
+  font-size: 11px;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.metric-tab-active {
+  background: linear-gradient(120deg, #1d4ed8, #0ea5e9);
+  color: #f9fafb;
+}
+
+/* Region / Platform table */
+.region-table-wrapper {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.region-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.region-table thead tr {
+  border-bottom: 1px solid rgba(55, 65, 81, 0.95);
+}
+
+.region-table th,
+.region-table td {
+  padding: 6px 4px;
+}
+
+.region-table tbody tr {
+  border-bottom: 1px solid rgba(17, 24, 39, 0.95);
+}
+
+.region-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.region-table tbody tr:hover {
+  background: rgba(15, 23, 42, 0.96);
+}
+
+/* Region MoM pill */
+.region-mom {
+  display: inline-block;
+  min-width: 64px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(31, 41, 55, 0.95);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.region-mom.kpi-pos {
+  background: rgba(22, 163, 74, 0.25);
+}
+
+.region-mom.kpi-neg {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+/* Section titles (Heatmap / Charts) */
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.section-subtitle {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0 0 16px;
+}
+
+/* ===== Small screens ===== */
+
+@media (max-width: 900px) {
+  .app-root {
+    padding: 20px 10px 32px;
+  }
+
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-card {
+    padding: 16px 14px 18px;
+  }
+}
+
