@@ -122,24 +122,21 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
     );
   }
 
-  // ==== Y 軸範圍：用 min/max 加 padding，讓線段置中一些 ====
+  // ==== Y 軸範圍：用 min/max + padding，讓線段置中一些 ====
   let domainMin = minValue;
   let domainMax = maxValue;
 
   if (domainMin === domainMax) {
-    // 只有一個值時給一點上下 padding
     const padding = domainMax === 0 ? 1 : Math.abs(domainMax) * 0.1;
     domainMin -= padding;
     domainMax += padding;
   } else {
     const span = domainMax - domainMin;
-    const padding = span * 0.2; // 上下各留 20%
+    const padding = span * 0.2;
     domainMin -= padding;
     domainMax += padding;
   }
 
-  // 不用強制 >= 0，因為訂單 / 營收不會是負的，AOV 也自然 > 0
-  // 但如果算出來 domainMin > domainMax（理論上不會），保底一下
   if (domainMax <= domainMin) {
     domainMax = domainMin + 1;
   }
@@ -164,17 +161,22 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
 
   const COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
 
+  // ⭐ 三條線時字級更小一點
+  const labelFontSize = series.length >= 3 ? 8 : 9.5;
+
   // 避免同一個 x 位置上標籤互相重疊
   const usedLabelY: Record<number, number[]> = {};
-
   const avoidOverlap = (xIndex: number, proposedY: number) => {
     if (!usedLabelY[xIndex]) usedLabelY[xIndex] = [];
     const taken = usedLabelY[xIndex];
 
+    // ⭐ 三條線時要求更大的最小間距
+    const minGap = series.length >= 3 ? 16 : 14;
+
     let finalY = proposedY;
     for (const y of taken) {
-      if (Math.abs(finalY - y) < 14) {
-        finalY += 14;
+      if (Math.abs(finalY - y) < minGap) {
+        finalY += minGap;
       }
     }
     taken.push(finalY);
@@ -203,7 +205,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
           strokeWidth={1}
         />
 
-        {/* 5 條水平 grid 線，提高高度區分感 */}
+        {/* 5 條水平 grid 線 */}
         {[0.2, 0.4, 0.6, 0.8, 1].map((r) => {
           const y = margin.top + chartHeight - r * chartHeight;
           return (
@@ -278,7 +280,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
                       x={x}
                       y={adjustedY}
                       textAnchor="middle"
-                      fontSize={9.5}
+                      fontSize={labelFontSize}
                       fill={color}
                     >
                       {label}
@@ -291,7 +293,6 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
         })}
       </svg>
 
-      {/* Legend */}
       <div className="platform-trend-legend">
         {series.map((s, si) => (
           <div key={s.platform} className="platform-trend-legend-item">
@@ -306,6 +307,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
     </div>
   );
 };
+
 
 export const ExecutiveSummary: React.FC<Props> = ({
   language,
