@@ -53,6 +53,17 @@ type BreakdownRow = {
 type SortKey = 'current' | 'share' | 'previous' | 'mom';
 type SortDir = 'asc' | 'desc';
 
+type TrendPoint = { month: string; value: number };
+type TrendSeries = { platform: string; points: TrendPoint[] };
+
+type PlatformTrendChartProps = {
+  series: TrendSeries[];
+  months: string[];
+  monthLabelFn: (iso: string | null) => string;
+  valueFormatter: (v: number | null | undefined) => string;
+  isZh: boolean;
+};
+
 // ========= formatter =========
 const formatCurrency = (value: number | null | undefined) => {
   if (value == null) return '—';
@@ -80,6 +91,196 @@ const getDeltaClass = (value: number | null | undefined) => {
   if (value > 0) return 'kpi-pos';
   if (value < 0) return 'kpi-neg';
   return '';
+};
+
+const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
+  series,
+  months,
+  monthLabelFn,
+  valueFormatter,
+  isZh,
+}) => {
+  if (!months.length || !series.length) {
+    return (
+      <div className="platform-trend-empty">
+        {isZh ? '暫無趨勢數據。' : 'No trend data for this period.'}
+      </div>
+    );
+  }
+
+  const flatValues = series.flatMap((s) => s.points.map((p) => p.value));
+  const maxValue = Math.max(...flatValues, 0);
+
+  if (maxValue <= 0) {
+    return (
+      <div className="platform-trend-empty">
+        {isZh ? '暫無趨勢數據。' : 'No trend data for this period.'}
+      </div>
+    );
+  }
+
+  const width = 420;
+  const height = 220;
+  const margin = { top: 16, right: 16, bottom: 40, left: 40 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+
+  const xStep =
+    months.length > 1 ? chartWidth / (months.length - 1) : chartWidth / 2;
+
+  const getX = (idx: number) =>
+    margin.left + (months.length === 1 ? chartWidth / 2 : xStep * idx);
+
+  const getY = (value: number) => {
+    if (maxValue === 0) return margin.top + chartHeight;
+    const ratio = value / maxValue;
+    return margin.top + chartHeight - ratio * chartHeight;
+  };
+
+  const COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
+
+  const formatShort = (v: number) => {
+    const raw = valueFormatter(v); // 可能是 $12,345 或 12,345
+
+    // 先抓出數字部分
+    const numeric = Number(
+      String(raw).replace(/[^0-9.-]/g, ''),
+    );
+    const num = Number.isNaN(numeric) ? Math.abs(v) : Math.abs(numeric);
+
+    if (num >= 1_000_000) {
+      return `${(num / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+    }
+    if (num >= 10_000) {
+      return `${(num / 1000).toFixed(0)}k`;
+    }
+    return raw;
+  };
+
+  return (
+    <div className="platform-trend-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img">
+        {/* Y 軸 */}
+        <line
+          x1={margin.left}
+          y1={margin.top}
+          x2={margin.left}
+          y2={margin.top + chartHeight}
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth={1}
+        />
+        {/* X 軸 */}
+        <line
+          x1={margin.left}
+          y1={margin.top + chartHeight}
+          x2={margin.left + chartWidth}
+          y2={margin.top + chartHeight}
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth={1}
+        />
+
+        {/* 橫向 grid 線（3 條） */}
+        {[0.33, 0.66, 1].map((r) => {
+          const y = margin.top + chartHeight - r * chartHeight;
+          return (
+            <line
+              key={r}
+              x1={margin.left}
+              y1={y}
+              x2={margin.left + chartWidth}
+              y2={y}
+              stroke="rgba(255,255,255,0.04)"
+              strokeWidth={1}
+            />
+          );
+        })}
+
+        {/* X 軸月份標籤 */}
+        {months.map((m, idx) => {
+          const x = getX(idx);
+          const y = margin.top + chartHeight + 20;
+          return (
+            <text
+              key={m}
+              x={x}
+              y={y}
+              textAnchor="middle"
+              fontSize={11}
+              fill="rgba(255,255,255,0.5)"
+            >
+              {monthLabelFn(m)}
+            </text>
+          );
+        })}
+
+        {/* 線條 + 點 + 數字 */}
+        {series.map((s, si) => {
+          const color = COLORS[si % COLORS.length];
+
+          const pathD = s.points
+            .map((p, idx) => {
+              const x = getX(idx);
+              const y = getY(p.value);
+              return `${idx === 0 ? 'M' : 'L'} ${x} ${y}`;
+            })
+            .join(' ');
+
+          return (
+            <g key={s.platform}>
+              <path
+                d={pathD}
+                fill="none"
+                stroke={color}
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+              {s.points.map((p, idx) => {
+                const x = getX(idx);
+                const y = getY(p.value);
+                return (
+                  <g key={idx}>
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={3.5}
+                      fill={color}
+                      stroke="#020617"
+                      strokeWidth={1}
+                    />
+                    <text
+                      x={x}
+                      y={y - 10}
+                      textAnchor="middle"
+                      fontSize={11}
+                      fill={color}
+                    >
+                      {formatShort(p.value)}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Legend */}
+      <div className="platform-trend-legend">
+        {series.map((s, si) => {
+          const color = COLORS[si % COLORS.length];
+          return (
+            <div key={s.platform} className="platform-trend-legend-item">
+              <span
+                className="platform-trend-legend-dot"
+                style={{ backgroundColor: color }}
+              />
+              <span>{s.platform}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 export const ExecutiveSummary: React.FC<Props> = ({
@@ -312,6 +513,60 @@ export const ExecutiveSummary: React.FC<Props> = ({
     rawRows,
     selectedRegion,
   ]);
+
+  // ========= 近三個月各平台趨勢 =========
+  const platformTrendSeries: TrendSeries[] = useMemo(() => {
+    if (!periodMonths.length) return [];
+
+    const monthsSet = new Set(periodMonths);
+
+    const platforms = Array.from(
+      new Set(
+        rawRows
+          .filter(
+            (r) => r.region === selectedRegion && monthsSet.has(r.month),
+          )
+          .map((r) => r.platform),
+      ),
+    ).sort();
+
+    if (!platforms.length) return [];
+
+    const pickMetric = (agg: { revenue: number; orders: number }) => {
+      if (activeMetric === 'revenue') return agg.revenue;
+      if (activeMetric === 'orders') return agg.orders;
+      return agg.orders > 0 ? agg.revenue / agg.orders : 0;
+    };
+
+    const series: TrendSeries[] = platforms.map((platform) => {
+      const points: TrendPoint[] = periodMonths.map((month) => {
+        let revenue = 0;
+        let orders = 0;
+        for (const r of rawRows) {
+          if (
+            r.region === selectedRegion &&
+            r.platform === platform &&
+            r.month === month
+          ) {
+            revenue += Number(r.revenue) || 0;
+            orders += Number(r.orders) || 0;
+          }
+        }
+        const value = pickMetric({ revenue, orders });
+        return { month, value };
+      });
+
+      return { platform, points };
+    });
+
+    const maxVal = Math.max(
+      ...series.flatMap((s) => s.points.map((p) => p.value)),
+      0,
+    );
+    if (maxVal <= 0) return [];
+
+    return series;
+  }, [activeMetric, periodMonths, rawRows, selectedRegion]);
 
   // 排序後的 rows
   const sortedBreakdownRows = useMemo(() => {
@@ -681,6 +936,38 @@ export const ExecutiveSummary: React.FC<Props> = ({
             </tbody>
           </table>
         </div>
+
+        {/* 近三個月平台趨勢折線圖 */}
+        {platformTrendSeries.length > 0 && (
+          <div className="platform-trend-section">
+            <div className="platform-trend-header">
+              <div className="platform-trend-title">
+                {isZh
+                  ? '近三個月各平台業績趨勢'
+                  : '3-month platform performance trend'}
+              </div>
+              <div className="platform-trend-subtitle">
+                {isZh
+                  ? `地區：${selectedRegion} · 期間：${monthLabel(
+                      periodMonths[0],
+                    )} – ${monthLabel(periodMonths[periodMonths.length - 1])}`
+                  : `Region: ${selectedRegion} · Period: ${monthLabel(
+                      periodMonths[0],
+                    )} – ${monthLabel(
+                      periodMonths[periodMonths.length - 1],
+                    )}`}
+              </div>
+            </div>
+
+            <PlatformTrendChart
+              series={platformTrendSeries}
+              months={periodMonths}
+              monthLabelFn={monthLabel}
+              valueFormatter={activeFormatter}
+              isZh={isZh}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
