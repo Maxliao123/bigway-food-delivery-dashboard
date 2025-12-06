@@ -139,14 +139,75 @@ export const PlatformMatrix: React.FC<Props> = ({
 
   return (
     <section>
-      <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
-        {isZh ? '多平台動能矩陣' : 'Platform Velocity Matrix'}
-      </h2>
-      <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 12 }}>
-        {isZh
-          ? '各平台門店營收、單量與客單價的 MoM 表現，點擊欄位可排序。'
-          : 'Store-level performance by platform (revenue, orders, AOV). Click headers to sort.'}
-      </p>
+      {/* 標題列 + 平台篩選器（同一層級高度） */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+          gap: 12,
+          marginBottom: 10,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
+            {isZh ? '多平台動能矩陣' : 'Platform Velocity Matrix'}
+          </h2>
+          <p style={{ fontSize: 13, color: '#9ca3af' }}>
+            {isZh
+              ? '各平台門店營收、單量與客單價的 MoM 表現，點擊欄位可排序。'
+              : 'Store-level performance by platform (revenue, orders, AOV). Click headers to sort.'}
+          </p>
+        </div>
+
+        {/* 平台篩選器：整個板塊共用 */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ fontSize: 11, color: '#9ca3af' }}>
+            {isZh ? '平台：' : 'Platform:'}
+          </span>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: 2,
+              borderRadius: 9999,
+              border: '1px solid #374151',
+              background: '#020617',
+            }}
+          >
+            {PLATFORM_OPTIONS.map(opt => {
+              const active = platformFilter === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setPlatformFilter(opt.value)}
+                  style={{
+                    border: 'none',
+                    borderRadius: 9999,
+                    padding: '2px 8px',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    background: active ? '#1f2937' : 'transparent',
+                    color: active ? '#f9fafb' : '#9ca3af',
+                    transition: 'background 0.15s ease, color 0.15s ease',
+                  }}
+                >
+                  {isZh ? opt.labelZh : opt.labelEn}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
       {loading && (
         <div style={{ fontSize: 13 }}>
@@ -170,7 +231,7 @@ export const PlatformMatrix: React.FC<Props> = ({
             overflowX: 'auto',
           }}
         >
-          {/* 上方：區域＋月份 + 平台篩選器 */}
+          {/* 卡片上方：區域＋月份（平台已移到標題列） */}
           <div
             style={{
               fontSize: 11,
@@ -186,57 +247,15 @@ export const PlatformMatrix: React.FC<Props> = ({
             <span>
               {isZh ? `${selectedRegion} — 門店層級` : `${selectedRegion} — Store Level`}
             </span>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                flexWrap: 'wrap',
-              }}
-            >
-              <span>
-                {isZh ? '當月：' : 'Current: '}
-                {currentMonth ?? '—'}
-                {prevMonth
-                  ? isZh
-                    ? ` · 前一月：${prevMonth}`
-                    : ` · Prev: ${prevMonth}`
-                  : ''}
-              </span>
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  padding: 2,
-                  borderRadius: 9999,
-                  border: '1px solid #374151',
-                  background: '#020617',
-                }}
-              >
-                {PLATFORM_OPTIONS.map(opt => {
-                  const active = platformFilter === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => setPlatformFilter(opt.value)}
-                      style={{
-                        border: 'none',
-                        borderRadius: 9999,
-                        padding: '2px 8px',
-                        fontSize: 11,
-                        cursor: 'pointer',
-                        background: active ? '#1f2937' : 'transparent',
-                        color: active ? '#f9fafb' : '#9ca3af',
-                        transition: 'background 0.15s ease, color 0.15s ease',
-                      }}
-                    >
-                      {isZh ? opt.labelZh : opt.labelEn}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <span>
+              {isZh ? '當月：' : 'Current: '}
+              {currentMonth ?? '—'}
+              {prevMonth
+                ? isZh
+                  ? ` · 前一月：${prevMonth}`
+                  : ` · Prev: ${prevMonth}`
+                : ''}
+            </span>
           </div>
 
           {/* 表格 */}
