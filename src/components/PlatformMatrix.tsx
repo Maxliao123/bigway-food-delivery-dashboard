@@ -1,6 +1,9 @@
 // src/components/PlatformMatrix.tsx
 import React, { useMemo, useState } from 'react';
-import { usePlatformMatrix, type MatrixPlatformFilter } from '../hooks/usePlatformMatrix';
+import {
+  usePlatformMatrix,
+  type MatrixPlatformFilter,
+} from '../hooks/usePlatformMatrix';
 import type { Lang } from '../App';
 
 function formatCurrency(value: number): string {
@@ -37,6 +40,8 @@ function momCellStyle(mom: number | null): React.CSSProperties {
   return { color: '#9ca3af' };
 }
 
+const MONTH_COLORS = ['#3b82f6', '#f97316', '#a855f7'];
+
 type SortKey =
   | 'store_name'
   | 'revenueCurrent'
@@ -58,25 +63,60 @@ type Props = {
   selectedMonth: string;
 };
 
-const PLATFORM_OPTIONS: { value: MatrixPlatformFilter; labelEn: string; labelZh: string }[] = [
-  { value: 'ALL',      labelEn: 'All',     labelZh: '全平台' },
-  { value: 'UBER',     labelEn: 'Uber',    labelZh: 'Uber' },
-  { value: 'Fantuan',  labelEn: 'Fantuan', labelZh: 'Fantuan' },
+const PLATFORM_OPTIONS: {
+  value: MatrixPlatformFilter;
+  labelEn: string;
+  labelZh: string;
+}[] = [
+  { value: 'ALL', labelEn: 'All', labelZh: '全平台' },
+  { value: 'UBER', labelEn: 'Uber', labelZh: 'Uber' },
+  { value: 'Fantuan', labelEn: 'Fantuan', labelZh: 'Fantuan' },
   { value: 'Doordash', labelEn: 'Doordash', labelZh: 'Doordash' },
 ];
+
+const platformLabel = (value: MatrixPlatformFilter, isZh: boolean) => {
+  switch (value) {
+    case 'ALL':
+      return isZh ? '全平台總和' : 'All platforms';
+    case 'UBER':
+      return 'UBER';
+    case 'Fantuan':
+      return 'Fantuan';
+    case 'Doordash':
+      return 'Doordash';
+    default:
+      return value;
+  }
+};
+
+const monthLabel = (iso: string, lang: Lang) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 7);
+  const opts: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    year: 'numeric',
+  };
+  // zh 就用 zh-TW，其他用 en-CA
+  return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', opts);
+};
 
 export const PlatformMatrix: React.FC<Props> = ({
   language,
   selectedRegion,
   selectedMonth,
 }) => {
-  const [platformFilter, setPlatformFilter] = useState<MatrixPlatformFilter>('ALL');
+  const [platformFilter, setPlatformFilter] =
+    useState<MatrixPlatformFilter>('ALL');
 
-  const { loading, error, currentMonth, prevMonth, rows } = usePlatformMatrix(
-    selectedRegion,
-    selectedMonth,
-    platformFilter,
-  );
+  const {
+    loading,
+    error,
+    currentMonth,
+    prevMonth,
+    rows,
+    trendMonths,
+    trendSeries,
+  } = usePlatformMatrix(selectedRegion, selectedMonth, platformFilter);
 
   const [sort, setSort] = useState<SortState>({
     key: 'revenueCurrent',
@@ -86,7 +126,7 @@ export const PlatformMatrix: React.FC<Props> = ({
   const isZh = language === 'zh';
 
   const handleSort = (key: SortKey) => {
-    setSort(prev => {
+    setSort((prev) => {
       if (prev.key === key) {
         return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       }
@@ -137,6 +177,17 @@ export const PlatformMatrix: React.FC<Props> = ({
     return sort.direction === 'asc' ? ' ↑' : ' ↓';
   };
 
+  // 給長條圖用的最大值
+  const maxTrendValue = useMemo(() => {
+    let max = 0;
+    for (const s of trendSeries) {
+      for (const v of s.values) {
+        if (v > max) max = v;
+      }
+    }
+    return max;
+  }, [trendSeries]);
+
   return (
     <section>
       {/* 標題列 + 平台篩選器（同一層級高度） */}
@@ -184,7 +235,7 @@ export const PlatformMatrix: React.FC<Props> = ({
               background: '#020617',
             }}
           >
-            {PLATFORM_OPTIONS.map(opt => {
+            {PLATFORM_OPTIONS.map((opt) => {
               const active = platformFilter === opt.value;
               return (
                 <button
@@ -245,7 +296,9 @@ export const PlatformMatrix: React.FC<Props> = ({
             }}
           >
             <span>
-              {isZh ? `${selectedRegion} — 門店層級` : `${selectedRegion} — Store Level`}
+              {isZh
+                ? `${selectedRegion} — 門店層級`
+                : `${selectedRegion} — Store Level`}
             </span>
             <span>
               {isZh ? '當月：' : 'Current: '}
@@ -279,21 +332,33 @@ export const PlatformMatrix: React.FC<Props> = ({
 
                 {/* 營收 */}
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
                   onClick={() => handleSort('revenueCurrent')}
                 >
                   {isZh ? '當月營收' : 'Curr revenue'}
                   {renderSortArrow('revenueCurrent')}
                 </th>
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
                   onClick={() => handleSort('revenuePrev')}
                 >
                   {isZh ? '前一月營收' : 'Prev revenue'}
                   {renderSortArrow('revenuePrev')}
                 </th>
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
                   onClick={() => handleSort('revenueMom')}
                 >
                   {isZh ? '營收 MoM' : 'Rev MoM'}
@@ -302,14 +367,22 @@ export const PlatformMatrix: React.FC<Props> = ({
 
                 {/* 單量 */}
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
                   onClick={() => handleSort('ordersCurrent')}
                 >
                   {isZh ? '當月單量' : 'Curr orders'}
                   {renderSortArrow('ordersCurrent')}
                 </th>
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
                   onClick={() => handleSort('ordersMom')}
                 >
                   {isZh ? '單量變化' : 'Orders MoM'}
@@ -318,14 +391,22 @@ export const PlatformMatrix: React.FC<Props> = ({
 
                 {/* 客單價 */}
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
                   onClick={() => handleSort('aovCurrent')}
                 >
                   {isZh ? '當月客單價' : 'Curr AOV'}
                   {renderSortArrow('aovCurrent')}
                 </th>
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
                   onClick={() => handleSort('aovMom')}
                 >
                   {isZh ? '客單價變化' : 'AOV MoM'}
@@ -334,7 +415,7 @@ export const PlatformMatrix: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map(row => (
+              {sortedRows.map((row) => (
                 <tr
                   key={`${row.region}-${row.store_name}`}
                   style={{ borderBottom: '1px solid #111827' }}
@@ -346,7 +427,9 @@ export const PlatformMatrix: React.FC<Props> = ({
                     {formatCurrency(row.revenueCurrent)}
                   </td>
                   <td style={{ padding: '6px 4px', textAlign: 'right' }}>
-                    {row.revenuePrev != null ? formatCurrency(row.revenuePrev) : '—'}
+                    {row.revenuePrev != null
+                      ? formatCurrency(row.revenuePrev)
+                      : '—'}
                   </td>
                   <td
                     style={{
@@ -389,9 +472,160 @@ export const PlatformMatrix: React.FC<Props> = ({
               ))}
             </tbody>
           </table>
+
+          {/* 近三個月門店長條圖 */}
+          {trendMonths.length > 0 && trendSeries.length > 0 && maxTrendValue > 0 && (
+            <>
+              <div
+                style={{
+                  height: 1,
+                  background: '#111827',
+                  margin: '12px 0 10px',
+                }}
+              />
+              <div style={{ marginBottom: 8 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: '#e5e7eb',
+                    marginBottom: 2,
+                  }}
+                >
+                  {isZh
+                    ? '近三個月門店營收趨勢'
+                    : '3-month store revenue trend'}
+                </div>
+                <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                  {isZh ? '平台：' : 'Platform: '}{' '}
+                  {platformLabel(platformFilter, isZh)}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  position: 'relative',
+                  height: 190,
+                  padding: '10px 0 12px',
+                  overflowX: 'auto',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    gap: 14,
+                    height: '100%',
+                    paddingRight: 8,
+                  }}
+                >
+                  {trendSeries.map((series) => (
+                    <div
+                      key={`${series.region}-${series.store_name}`}
+                      style={{
+                        minWidth: 56,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                      }}
+                    >
+                      {/* bars */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-end',
+                          gap: 4,
+                          height: 140,
+                        }}
+                      >
+                        {series.values.map((v, idx) => {
+                          const height =
+                            maxTrendValue > 0
+                              ? Math.max(
+                                  4,
+                                  (v / maxTrendValue) * 120, // 120px 讓上方還有空間放數字
+                                )
+                              : 4;
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                position: 'relative',
+                                width: 10,
+                                borderRadius: 9999,
+                                backgroundColor:
+                                  MONTH_COLORS[idx % MONTH_COLORS.length],
+                                height,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  position: 'absolute',
+                                  bottom: height + 2,
+                                  left: '50%',
+                                  transform: 'translateX(-50%)',
+                                  fontSize: 9,
+                                  color: '#e5e7eb',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {v === 0 ? '0' : v.toLocaleString()}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 4,
+                          fontSize: 10,
+                          color: '#9ca3af',
+                          textAlign: 'center',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {series.store_name}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 月份 legend */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 12,
+                  fontSize: 10,
+                  color: '#9ca3af',
+                  marginTop: 4,
+                  flexWrap: 'wrap',
+                }}
+              >
+                {trendMonths.map((m, idx) => (
+                  <div
+                    key={m}
+                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 9999,
+                        backgroundColor:
+                          MONTH_COLORS[idx % MONTH_COLORS.length],
+                      }}
+                    />
+                    <span>{monthLabel(m, language)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </section>
   );
 };
+
 
