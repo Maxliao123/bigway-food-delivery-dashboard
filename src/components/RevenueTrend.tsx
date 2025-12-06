@@ -27,7 +27,12 @@ function formatMonthLabel(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
-export const RevenueTrend: React.FC = () => {
+type Props = {
+  selectedRegion: string;
+  selectedMonth: string;
+};
+
+export const RevenueTrend: React.FC<Props> = ({ selectedRegion, selectedMonth }) => {
   const { loading, error, months, rows } = useTrendData();
 
   const { labels, data } = useMemo(() => {
@@ -35,12 +40,16 @@ export const RevenueTrend: React.FC = () => {
       return { labels: [] as string[], data: [] as number[] };
     }
 
-    const lastThree = months.slice(-3);
+    const selectedIdx = months.indexOf(selectedMonth);
+    const lastThree =
+      selectedIdx === -1
+        ? months.slice(-3)
+        : months.slice(Math.max(0, selectedIdx - 2), selectedIdx + 1);
     const labels = lastThree.map(formatMonthLabel);
 
     const data = lastThree.map(month => {
       return rows
-        .filter(r => r.month === month)
+        .filter(r => r.month === month && r.region === selectedRegion)
         .reduce((sum, r) => sum + r.revenue, 0);
     });
 

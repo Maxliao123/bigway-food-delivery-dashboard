@@ -11,14 +11,19 @@ import type { Lang } from '../App';
 type Props = {
   language: Lang;
   selectedRegion: string | null;
+  selectedMonth: string;
 };
 
-export const StoreHeatmap: React.FC<Props> = ({ language, selectedRegion }) => {
+export const StoreHeatmap: React.FC<Props> = ({ language, selectedRegion, selectedMonth }) => {
   const { loading, error, months, rows } = useMoMHeatmap();
   const isZh = language === 'zh';
 
   const { periodMonths, stores, momByStore } = useMemo(() => {
-    const periodMonths = months.slice(-3);
+    const selectedIdx = months.indexOf(selectedMonth);
+    const periodMonths =
+      selectedIdx === -1
+        ? months.slice(-3)
+        : months.slice(Math.max(0, selectedIdx - 2), selectedIdx + 1);
 
     if (!selectedRegion) {
       return { periodMonths, stores: [] as string[], momByStore: {} as any };

@@ -25,12 +25,14 @@ function buildMom(current: number, previous: number | null): number | null {
   return (current - previous) / previous;
 }
 
-export function usePlatformMatrix() {
+export function usePlatformMatrix(selectedRegion: string, selectedMonth: string | null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentMonth, setCurrentMonth] = useState<string | null>(null);
   const [prevMonth, setPrevMonth] = useState<string | null>(null);
   const [rows, setRows] = useState<PlatformRow[]>([]);
+  const [rawRows, setRawRows] = useState<RawRow[]>([]);
+  const [months, setMonths] = useState<string[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -55,85 +57,82 @@ export function usePlatformMatrix() {
         revenue: Number(r.revenue ?? 0),
       }));
 
-      // 找月份：最新 & 前一個月
       const uniqueMonths = Array.from(new Set(casted.map((r) => r.month))).sort();
 
-      const cm: string | null = uniqueMonths.at(-1) ?? null;
-      const pm: string | null =
-        uniqueMonths.length >= 2 ? uniqueMonths.at(-2) ?? null : null;
-
-      setCurrentMonth(cm);
-      setPrevMonth(pm);
-
-      if (!cm) {
-        setRows([]);
-        setLoading(false);
-        return;
-      }
-
-      const currentRows = casted.filter((r) => r.month === cm);
-      const prevRows = pm ? casted.filter((r) => r.month === pm) : [];
-
-      // 以 store + region 為 key 聚合
-      const map = new Map<string, PlatformRow>();
-
-      const ensureRow = (store: string, region: string): PlatformRow => {
-        const key = `${store}::${region}`;
-        if (!map.has(key)) {
-          map.set(key, {
-            store_name: store,
-            region,
-            uberCurrent: 0,
-            uberPrev: null,
-            uberMom: null,
-            fantuanCurrent: 0,
-            fantuanPrev: null,
-            fantuanMom: null,
-          });
-        }
-        return map.get(key)!;
-      };
-
-      // 當月
-      for (const r of currentRows) {
-        const row = ensureRow(r.store_name, r.region);
-        if (r.platform === 'UBER') {
-          row.uberCurrent += r.revenue;
-        } else if (r.platform === 'Fantuan') {
-          row.fantuanCurrent += r.revenue;
-        }
-      }
-
-      // 上月
-      for (const r of prevRows) {
-        const row = ensureRow(r.store_name, r.region);
-        if (r.platform === 'UBER') {
-          row.uberPrev = (row.uberPrev ?? 0) + r.revenue;
-        } else if (r.platform === 'Fantuan') {
-          row.fantuanPrev = (row.fantuanPrev ?? 0) + r.revenue;
-        }
-      }
-
-      // 算 MoM
-      for (const row of map.values()) {
-        row.uberMom = buildMom(row.uberCurrent, row.uberPrev);
-        row.fantuanMom = buildMom(row.fantuanCurrent, row.fantuanPrev);
-      }
-
-      // 依 region, store 排序
-      const result = Array.from(map.values()).sort((a, b) => {
-        if (a.region === b.region) {
-          return a.store_name.localeCompare(b.store_name);
-        }
-        return a.region.localeCompare(b.region);
-      });
-
-      setRows(result);
+      setMonths(uniqueMonths);
+      setRawRows(casted);
       setLoading(false);
     };
 
     load();
   }, []);
+
+  useEffect(() => {
+    if (!selectedMonth || !months.length) return;
+
+    const idx = months.indexOf(selectedMonth);
+    const prev = idx > 0 ? months[idx - 1] : null;
+    setCurrentMonth(selectedMonth);
+    setPrevMonth(prev);
+
+    const currentRows = rawRows.filter(
+      (r) => r.month === selectedMonth && r.region === selectedRegion,
+    );
+    const prevRows = prev
+      ? rawRows.filter((r) => r.month === prev && r.region === selectedRegion)
+      : [];
+
+    const map = new Map<string, PlatformRow>();
+
+    const ensureRow = (store: string, region: string): PlatformRow => {
+      const key = `${store}::${region}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          store_name: store,
+          region,
+          uberCurrent: 0,
+          uberPrev: null,
+          uberMom: null,
+          fantuanCurrent: 0,
+          fantuanPrev: null,
+          fantuanMom: null,
+        });
+      }
+      return map.get(key)!;
+    };
+
+    for (const r of currentRows) {
+      const row = ensureRow(r.store_name, r.region);
+      if (r.platform === 'UBER') {
+        row.uberCurrent += r.revenue;
+      } else if (r.platform === 'Fantuan') {
+        row.fantuanCurrent += r.revenue;
+      }
+    }
+
+    for (const r of prevRows) {
+      const row = ensureRow(r.store_name, r.region);
+      if (r.platform === 'UBER') {
+        row.uberPrev = (row.uberPrev ?? 0) + r.revenue;
+      } else if (r.platform === 'Fantuan') {
+        row.fantuanPrev = (row.fantuanPrev ?? 0) + r.revenue;
+      }
+    }
+
+    for (const row of map.values()) {
+      row.uberMom = buildMom(row.uberCurrent, row.uberPrev);
+      row.fantuanMom = buildMom(row.fantuanCurrent, row.fantuanPrev);
+    }
+
+    const result = Array.from(map.values()).sort((a, b) => {
+      if (a.region === b.region) {
+        return a.store_name.localeCompare(b.store_name);
+      }
+      return a.region.localeCompare(b.region);
+    });
+
+    setRows(result);
+  }, [months, rawRows, selectedMonth, selectedRegion]);
 
   return { loading, error, currentMonth, prevMonth, rows };
 }
