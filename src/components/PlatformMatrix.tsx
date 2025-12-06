@@ -8,7 +8,12 @@ import type { Lang } from '../App';
 
 function formatCurrency(value: number): string {
   if (!Number.isFinite(value) || value === 0) return '$0';
-  return '$' + value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return (
+    '$' +
+    value.toLocaleString(undefined, {
+      maximumFractionDigits: 0,
+    })
+  );
 }
 
 function formatNumber(value: number): string {
@@ -18,7 +23,12 @@ function formatNumber(value: number): string {
 
 function formatAov(value: number): string {
   if (!Number.isFinite(value)) return '—';
-  return '$' + value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  return (
+    '$' +
+    value.toLocaleString(undefined, {
+      maximumFractionDigits: 1,
+    })
+  );
 }
 
 function formatPercent(value: number | null): string {
@@ -40,7 +50,8 @@ function momCellStyle(mom: number | null): React.CSSProperties {
   return { color: '#9ca3af' };
 }
 
-const MONTH_COLORS = ['#3b82f6', '#f97316', '#a855f7'];
+// 顏色改成同一色系：最舊淡、中間、中等、最新亮
+const MONTH_COLORS = ['#4b5563', '#64748b', '#4f8cff'];
 
 type SortKey =
   | 'store_name'
@@ -96,7 +107,6 @@ const monthLabel = (iso: string, lang: Lang) => {
     month: 'short',
     year: 'numeric',
   };
-  // zh 就用 zh-TW，其他用 en-CA
   return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', opts);
 };
 
@@ -177,7 +187,7 @@ export const PlatformMatrix: React.FC<Props> = ({
     return sort.direction === 'asc' ? ' ↑' : ' ↓';
   };
 
-  // 給長條圖用的最大值
+  // bar chart 用：找出最大值 & 依最新月份排序門店
   const maxTrendValue = useMemo(() => {
     let max = 0;
     for (const s of trendSeries) {
@@ -188,9 +198,20 @@ export const PlatformMatrix: React.FC<Props> = ({
     return max;
   }, [trendSeries]);
 
+  const sortedTrendSeries = useMemo(() => {
+    if (!trendMonths.length || !trendSeries.length) return [];
+    const lastIdx = trendMonths.length - 1;
+    return [...trendSeries].sort(
+      (a, b) => (b.values[lastIdx] || 0) - (a.values[lastIdx] || 0),
+    );
+  }, [trendMonths, trendSeries]);
+
+  const latestIndex =
+    trendMonths.length > 0 ? trendMonths.length - 1 : -1;
+
   return (
     <section>
-      {/* 標題列 + 平台篩選器（同一層級高度） */}
+      {/* 標題列 + 平台篩選器 */}
       <div
         style={{
           display: 'flex',
@@ -212,7 +233,6 @@ export const PlatformMatrix: React.FC<Props> = ({
           </p>
         </div>
 
-        {/* 平台篩選器：整個板塊共用 */}
         <div
           style={{
             display: 'flex',
@@ -282,7 +302,7 @@ export const PlatformMatrix: React.FC<Props> = ({
             overflowX: 'auto',
           }}
         >
-          {/* 卡片上方：區域＋月份（平台已移到標題列） */}
+          {/* 區域＋月份 */}
           <div
             style={{
               fontSize: 11,
@@ -474,154 +494,160 @@ export const PlatformMatrix: React.FC<Props> = ({
           </table>
 
           {/* 近三個月門店長條圖 */}
-          {trendMonths.length > 0 && trendSeries.length > 0 && maxTrendValue > 0 && (
-            <>
-              <div
-                style={{
-                  height: 1,
-                  background: '#111827',
-                  margin: '12px 0 10px',
-                }}
-              />
-              <div style={{ marginBottom: 8 }}>
+          {trendMonths.length > 0 &&
+            sortedTrendSeries.length > 0 &&
+            maxTrendValue > 0 && (
+              <>
                 <div
                   style={{
-                    fontSize: 12,
-                    color: '#e5e7eb',
-                    marginBottom: 2,
+                    height: 1,
+                    background: '#111827',
+                    margin: '12px 0 10px',
+                  }}
+                />
+                <div style={{ marginBottom: 8 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: '#e5e7eb',
+                      marginBottom: 2,
+                    }}
+                  >
+                    {isZh
+                      ? '近三個月門店營收趨勢'
+                      : '3-month store revenue trend'}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                    {isZh ? '平台：' : 'Platform: '}
+                    {platformLabel(platformFilter, isZh)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    position: 'relative',
+                    height: 190,
+                    padding: '10px 0 12px',
+                    overflowX: 'auto',
                   }}
                 >
-                  {isZh
-                    ? '近三個月門店營收趨勢'
-                    : '3-month store revenue trend'}
-                </div>
-                <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                  {isZh ? '平台：' : 'Platform: '}{' '}
-                  {platformLabel(platformFilter, isZh)}
-                </div>
-              </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      gap: 14,
+                      height: '100%',
+                      paddingRight: 8,
+                    }}
+                  >
+                    {sortedTrendSeries.map((series) => (
+                      <div
+                        key={`${series.region}-${series.store_name}`}
+                        style={{
+                          minWidth: 56,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                        }}
+                      >
+                        {/* bars */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-end',
+                            gap: 4,
+                            height: 140,
+                          }}
+                        >
+                          {series.values.map((rawV, idx) => {
+                            const v = Number(rawV || 0);
+                            const ratio =
+                              maxTrendValue > 0 ? v / maxTrendValue : 0;
+                            const height = Math.max(4, ratio * 120); // 120px 留空間放標籤
+                            const isLatest = idx === latestIndex;
+                            const rounded = Math.round(v);
 
-              <div
-                style={{
-                  position: 'relative',
-                  height: 190,
-                  padding: '10px 0 12px',
-                  overflowX: 'auto',
-                }}
-              >
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  position: 'relative',
+                                  width: 10,
+                                  borderRadius: 9999,
+                                  backgroundColor:
+                                    MONTH_COLORS[idx % MONTH_COLORS.length],
+                                  height,
+                                }}
+                              >
+                                {isLatest && (
+                                  <span
+                                    style={{
+                                      position: 'absolute',
+                                      bottom: height + 4,
+                                      left: '50%',
+                                      transform: 'translateX(-50%)',
+                                      fontSize: 9,
+                                      color: '#e5e7eb',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {rounded === 0
+                                      ? '0'
+                                      : rounded.toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 10,
+                            color: '#9ca3af',
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {series.store_name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 月份 legend */}
                 <div
                   style={{
                     display: 'flex',
-                    alignItems: 'flex-end',
-                    gap: 14,
-                    height: '100%',
-                    paddingRight: 8,
+                    gap: 12,
+                    fontSize: 10,
+                    color: '#9ca3af',
+                    marginTop: 4,
+                    flexWrap: 'wrap',
                   }}
                 >
-                  {trendSeries.map((series) => (
+                  {trendMonths.map((m, idx) => (
                     <div
-                      key={`${series.region}-${series.store_name}`}
-                      style={{
-                        minWidth: 56,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'flex-end',
-                      }}
+                      key={m}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                     >
-                      {/* bars */}
-                      <div
+                      <span
                         style={{
-                          display: 'flex',
-                          alignItems: 'flex-end',
-                          gap: 4,
-                          height: 140,
+                          width: 8,
+                          height: 8,
+                          borderRadius: 9999,
+                          backgroundColor:
+                            MONTH_COLORS[idx % MONTH_COLORS.length],
                         }}
-                      >
-                        {series.values.map((v, idx) => {
-                          const height =
-                            maxTrendValue > 0
-                              ? Math.max(
-                                  4,
-                                  (v / maxTrendValue) * 120, // 120px 讓上方還有空間放數字
-                                )
-                              : 4;
-                          return (
-                            <div
-                              key={idx}
-                              style={{
-                                position: 'relative',
-                                width: 10,
-                                borderRadius: 9999,
-                                backgroundColor:
-                                  MONTH_COLORS[idx % MONTH_COLORS.length],
-                                height,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  position: 'absolute',
-                                  bottom: height + 2,
-                                  left: '50%',
-                                  transform: 'translateX(-50%)',
-                                  fontSize: 9,
-                                  color: '#e5e7eb',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {v === 0 ? '0' : v.toLocaleString()}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 10,
-                          color: '#9ca3af',
-                          textAlign: 'center',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {series.store_name}
-                      </div>
+                      />
+                      <span>{monthLabel(m, language)}</span>
                     </div>
                   ))}
                 </div>
-              </div>
-
-              {/* 月份 legend */}
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 12,
-                  fontSize: 10,
-                  color: '#9ca3af',
-                  marginTop: 4,
-                  flexWrap: 'wrap',
-                }}
-              >
-                {trendMonths.map((m, idx) => (
-                  <div
-                    key={m}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                  >
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: 9999,
-                        backgroundColor:
-                          MONTH_COLORS[idx % MONTH_COLORS.length],
-                      }}
-                    />
-                    <span>{monthLabel(m, language)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+              </>
+            )}
         </div>
       )}
     </section>
