@@ -97,21 +97,22 @@ export const ExecutiveSummary: React.FC<Props> = ({
   const isZh = language === 'zh';
   const isOverview = false;
 
-  const monthLabel = (iso: string | null) => {
-    if (!iso) return '—';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso.slice(0, 7);
-    if (isZh) {
-      return `${d.getFullYear()}年${String(d.getMonth() + 1).padStart(
-        2,
-        '0',
-      )}月`;
-    }
-    return d.toLocaleDateString('en-CA', {
-      month: 'short',
-      year: 'numeric',
-    });
-  };
+ const monthLabel = (iso: string | null) => {
+  if (!iso) return '—';
+  const short = iso.slice(0, 7); // "YYYY-MM"
+  const [year, month] = short.split('-');
+  const mNum = Number(month);
+  if (!year || !mNum || Number.isNaN(mNum)) return short;
+
+  if (isZh) {
+    return `${year}年${month}月`;
+  }
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${MONTHS[mNum - 1]} ${year}`;
+};
+
 
   // ========= 原 regional arrays（現在主要用在空資料 fallback） =========
   const revenueRegions = regionalRevenueKpis || [];
