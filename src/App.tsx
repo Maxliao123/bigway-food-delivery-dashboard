@@ -53,11 +53,16 @@ function App() {
     return null;
   }, [allMonths, selectedMonth]);
 
-  const monthLabel = (iso: string) => {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso.slice(0, 7);
-    return d.toLocaleDateString('en-CA', { month: 'short', year: 'numeric' });
-  };
+const monthLabel = (iso: string) => {
+  const short = iso.slice(0, 7); // "YYYY-MM"
+  const [year, month] = short.split('-');
+  const mNum = Number(month);
+  if (!year || !mNum || Number.isNaN(mNum)) return short;
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${MONTHS[mNum - 1]} ${year}`;
+};
 
   return (
     <div className="app-root">
