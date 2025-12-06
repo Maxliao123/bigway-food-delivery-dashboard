@@ -477,8 +477,8 @@ body {
 /* ===== Platform trend chart (近三月折線圖) ===== */
 
 .platform-trend-section {
-  margin-top: 20px;
-  padding-top: 14px;
+  margin-top: 16px;        /* 比原本 20px 再收斂一點 */
+  padding-top: 12px;
   border-top: 1px solid rgba(148, 163, 184, 0.18);
 }
 
@@ -501,7 +501,7 @@ body {
 }
 
 .platform-trend-chart {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .platform-trend-empty {
