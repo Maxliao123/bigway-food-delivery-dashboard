@@ -190,6 +190,48 @@ function App() {
               />
             </section>
 
+                language={language}
+                selectedRegion={selectedRegion}
+                selectedMonth={selectedMonth}
+              />
+            </section>
+
+            {/* 3️⃣ Revenue MoM Heatmap（Region + Store Drilldown） */}
+            <section className="section-card section-heatmap">
+              <h2 className="section-title">
+                {isZh ? '營收月成長 Heatmap' : 'Revenue MoM Heatmap'}
+              </h2>
+              <p className="section-subtitle">
+                {isZh
+                  ? '上：各區 MoM 表現；下：選定區域的門店明細。'
+                  : 'Top: Region-level MoM performance. Bottom: Store-level breakdown.'}
+              </p>
+
+              <RegionHeatmap
+                language={language}
+                selectedRegion={selectedRegion}
+                selectedMonth={selectedMonth}
+                onSelectRegion={setSelectedRegion}
+              />
+              <div className="heatmap-divider" />
+              <StoreHeatmap
+                language={language}
+                selectedRegion={selectedRegion}
+                selectedMonth={selectedMonth}
+              />
+            </section>
+
+            {/* 4️⃣ Revenue Trend & Region Comparison */}
+            <section className="section-card section-charts">
+              <RevenueTrend selectedRegion={selectedRegion} selectedMonth={selectedMonth} />
+            </section>
+
+            <section className="section-card section-charts">
+              <RegionComparison
+                selectedRegion={selectedRegion}
+                selectedMonth={selectedMonth}
+              />
+            </section>
           </main>
         )}
       </div>
