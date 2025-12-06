@@ -6,10 +6,13 @@ import {
   formatPercent,
   getMoMColor,
 } from '../lib/heatmapUtils';
-import type { Lang } from '../App';
+import type { Lang, Scope } from '../App';
 
 type Props = {
   language: Lang;
+  selectedRegion: Scope | null;
+  selectedMonth: string;
+  onSelectRegion: (region: Scope) => void;
   selectedRegion: string | null;
   selectedMonth: string;
   onSelectRegion: (region: string) => void;
@@ -30,6 +33,10 @@ export const RegionHeatmap: React.FC<Props> = ({
       selectedIdx === -1
         ? months.slice(-3)
         : months.slice(Math.max(0, selectedIdx - 2), selectedIdx + 1);
+    const allRegions = Array.from(new Set(rows.map(r => r.region))).filter(
+      (r): r is Scope => ['BC', 'ON', 'CA'].includes(r as Scope)
+    );
+    const regions: Scope[] = selectedRegion ? [selectedRegion] : allRegions.sort();
     const regions = selectedRegion
       ? [selectedRegion]
       : Array.from(new Set(rows.map(r => r.region))).sort();
