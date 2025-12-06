@@ -11,7 +11,6 @@ type RawRow = {
   platform: string;
   revenue: number;
   orders: number;
-  aov: number | null;
 };
 
 export type MatrixRow = {
@@ -62,7 +61,8 @@ export function usePlatformMatrix(
 
       const { data, error } = await supabase
         .from('sales_records')
-        .select('month, region, store_name, platform, revenue, orders, aov');
+        // 👇 這裡只 select 你真的有的欄位：沒有 aov
+        .select('month, region, store_name, platform, revenue, orders');
 
       if (error) {
         setError(error.message);
@@ -77,7 +77,6 @@ export function usePlatformMatrix(
         platform: r.platform,
         revenue: Number(r.revenue ?? 0),
         orders: Number(r.orders ?? 0),
-        aov: r.aov != null ? Number(r.aov) : null,
       }));
 
       const uniqueMonths = Array.from(new Set(casted.map((r) => r.month))).sort();
@@ -158,6 +157,7 @@ export function usePlatformMatrix(
     }
 
     for (const row of map.values()) {
+      // AOV = 營收 ÷ 單量
       row.aovCurrent =
         row.ordersCurrent > 0 ? row.revenueCurrent / row.ordersCurrent : 0;
 
@@ -233,5 +233,4 @@ export function usePlatformMatrix(
     trendSeries,
   };
 }
-
 
