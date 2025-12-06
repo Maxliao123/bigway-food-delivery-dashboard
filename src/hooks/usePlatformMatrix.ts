@@ -4,26 +4,6 @@ import { supabase } from '../lib/supabaseClient';
 
 export type MatrixPlatformFilter = 'ALL' | 'UBER' | 'Fantuan' | 'Doordash';
 
-export type PlatformRow = {
-  store_name: string;
-  region: string;
-
-  // 營收
-  revenueCurrent: number;
-  revenuePrev: number | null;
-  revenueMom: number | null;
-
-  // 單量
-  ordersCurrent: number;
-  ordersPrev: number | null;
-  ordersMom: number | null;
-
-  // 客單價
-  aovCurrent: number;
-  aovPrev: number | null;
-  aovMom: number | null;
-};
-
 type RawRow = {
   month: string;
   region: string;
@@ -31,10 +11,31 @@ type RawRow = {
   platform: string;
   revenue: number;
   orders: number;
+  aov: number | null;
 };
 
-function buildMom(current: number, previous: number | null): number | null {
-  if (previous == null || previous === 0) return null;
+export type MatrixRow = {
+  store_name: string;
+  region: string;
+  revenueCurrent: number;
+  revenuePrev: number | null;
+  revenueMom: number | null;
+  ordersCurrent: number;
+  ordersPrev: number | null;
+  ordersMom: number | null;
+  aovCurrent: number;
+  aovPrev: number | null;
+  aovMom: number | null;
+};
+
+export type TrendStoreSeries = {
+  store_name: string;
+  region: string;
+  values: number[]; // 對應 trendMonths 的順序
+};
+
+function calcMom(current: number, previous: number | null): number | null {
+  if (previous === null || previous === 0) return null;
   return (current - previous) / previous;
 }
 
@@ -47,11 +48,13 @@ export function usePlatformMatrix(
   const [error, setError] = useState<string | null>(null);
   const [currentMonth, setCurrentMonth] = useState<string | null>(null);
   const [prevMonth, setPrevMonth] = useState<string | null>(null);
-  const [rows, setRows] = useState<PlatformRow[]>([]);
+  const [rows, setRows] = useState<MatrixRow[]>([]);
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
   const [months, setMonths] = useState<string[]>([]);
+  const [trendMonths, setTrendMonths] = useState<string[]>([]);
+  const [trendSeries, setTrendSeries] = useState<TrendStoreSeries[]>([]);
 
-  // 一次把 sales_records 撈進來
+  // 一次性抓資料
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -59,7 +62,7 @@ export function usePlatformMatrix(
 
       const { data, error } = await supabase
         .from('sales_records')
-        .select('month, region, store_name, platform, revenue, orders');
+        .select('month, region, store_name, platform, revenue, orders, aov');
 
       if (error) {
         setError(error.message);
@@ -74,9 +77,10 @@ export function usePlatformMatrix(
         platform: r.platform,
         revenue: Number(r.revenue ?? 0),
         orders: Number(r.orders ?? 0),
+        aov: r.aov != null ? Number(r.aov) : null,
       }));
 
-      const uniqueMonths = Array.from(new Set(casted.map(r => r.month))).sort();
+      const uniqueMonths = Array.from(new Set(casted.map((r) => r.month))).sort();
 
       setMonths(uniqueMonths);
       setRawRows(casted);
@@ -86,97 +90,148 @@ export function usePlatformMatrix(
     load();
   }, []);
 
-  // 依照「區域 + 月份 + 平台篩選」計算表格資料
+  // 依地區 / 月份 / 平台計算表格 + 長條圖資料
   useEffect(() => {
     if (!selectedMonth || !months.length) return;
 
     const idx = months.indexOf(selectedMonth);
-    const prev = idx > 0 ? months[idx - 1] : null;
+    if (idx === -1) return;
 
+    const prev = idx > 0 ? months[idx - 1] : null;
     setCurrentMonth(selectedMonth);
     setPrevMonth(prev);
 
-    const matchesPlatform = (p: string) => {
-      if (platformFilter === 'ALL') return true;
-      return p === platformFilter;
-    };
+    const matchPlatform = (platform: string) =>
+      platformFilter === 'ALL' ? true : platform === platformFilter;
 
+    // ---- 當月 / 前一月表格資料 ----
     const currentRows = rawRows.filter(
-      r =>
-        r.month === selectedMonth &&
+      (r) =>
         r.region === selectedRegion &&
-        matchesPlatform(r.platform),
+        r.month === selectedMonth &&
+        matchPlatform(r.platform),
     );
 
     const prevRows = prev
       ? rawRows.filter(
-          r =>
-            r.month === prev &&
+          (r) =>
             r.region === selectedRegion &&
-            matchesPlatform(r.platform),
+            r.month === prev &&
+            matchPlatform(r.platform),
         )
       : [];
 
-    const map = new Map<string, PlatformRow>();
+    const map = new Map<string, MatrixRow>();
 
-    const ensureRow = (store: string, region: string): PlatformRow => {
-      const key = `${store}::${region}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          store_name: store,
-          region,
-          revenueCurrent: 0,
-          revenuePrev: null,
-          revenueMom: null,
-          ordersCurrent: 0,
-          ordersPrev: null,
-          ordersMom: null,
-          aovCurrent: 0,
-          aovPrev: null,
-          aovMom: null,
-        });
-      }
-      return map.get(key)!;
+    const ensureRow = (store: string, region: string): MatrixRow => {
+      const key = `${region}::${store}`;
+      const existing = map.get(key);
+      if (existing) return existing;
+
+      const row: MatrixRow = {
+        store_name: store,
+        region,
+        revenueCurrent: 0,
+        revenuePrev: null,
+        revenueMom: null,
+        ordersCurrent: 0,
+        ordersPrev: null,
+        ordersMom: null,
+        aovCurrent: 0,
+        aovPrev: null,
+        aovMom: null,
+      };
+      map.set(key, row);
+      return row;
     };
 
-    // 當月
     for (const r of currentRows) {
       const row = ensureRow(r.store_name, r.region);
       row.revenueCurrent += r.revenue;
       row.ordersCurrent += r.orders;
     }
 
-    // 前一月
     for (const r of prevRows) {
       const row = ensureRow(r.store_name, r.region);
       row.revenuePrev = (row.revenuePrev ?? 0) + r.revenue;
       row.ordersPrev = (row.ordersPrev ?? 0) + r.orders;
     }
 
-    // 計算 AOV & MoM
     for (const row of map.values()) {
-      const prevRevenue = row.revenuePrev ?? 0;
-      const prevOrders = row.ordersPrev ?? 0;
-
       row.aovCurrent =
         row.ordersCurrent > 0 ? row.revenueCurrent / row.ordersCurrent : 0;
 
       row.aovPrev =
-        prevOrders > 0 ? prevRevenue / prevOrders : null;
+        row.ordersPrev != null && row.ordersPrev > 0 && row.revenuePrev != null
+          ? row.revenuePrev / row.ordersPrev
+          : null;
 
-      row.revenueMom = buildMom(row.revenueCurrent, row.revenuePrev);
-      row.ordersMom = buildMom(row.ordersCurrent, row.ordersPrev);
-      row.aovMom =
-        row.aovPrev == null ? null : buildMom(row.aovCurrent, row.aovPrev);
+      row.revenueMom = calcMom(row.revenueCurrent, row.revenuePrev);
+      row.ordersMom = calcMom(row.ordersCurrent, row.ordersPrev);
+      row.aovMom = row.aovPrev != null ? calcMom(row.aovCurrent, row.aovPrev) : null;
     }
 
-    const result = Array.from(map.values()).sort((a, b) =>
+    const tableRows = Array.from(map.values()).sort((a, b) =>
       a.store_name.localeCompare(b.store_name),
     );
+    setRows(tableRows);
 
-    setRows(result);
-  }, [months, rawRows, selectedMonth, selectedRegion, platformFilter]);
+    // ---- 近三個月門店長條圖資料 ----
+    const startIdx = Math.max(0, idx - 2);
+    const trendMs = months.slice(startIdx, idx + 1);
+    setTrendMonths(trendMs);
 
-  return { loading, error, currentMonth, prevMonth, rows };
+    if (trendMs.length === 0) {
+      setTrendSeries([]);
+      return;
+    }
+
+    const seriesMap = new Map<string, TrendStoreSeries>();
+
+    const ensureSeries = (store: string, region: string): TrendStoreSeries => {
+      const key = `${region}::${store}`;
+      const existing = seriesMap.get(key);
+      if (existing) return existing;
+
+      const s: TrendStoreSeries = {
+        store_name: store,
+        region,
+        values: new Array(trendMs.length).fill(0),
+      };
+      seriesMap.set(key, s);
+      return s;
+    };
+
+    for (let i = 0; i < trendMs.length; i++) {
+      const m = trendMs[i];
+      const monthRows = rawRows.filter(
+        (r) =>
+          r.region === selectedRegion &&
+          r.month === m &&
+          matchPlatform(r.platform),
+      );
+
+      for (const r of monthRows) {
+        const s = ensureSeries(r.store_name, r.region);
+        s.values[i] += r.revenue;
+      }
+    }
+
+    const series = Array.from(seriesMap.values()).sort((a, b) =>
+      a.store_name.localeCompare(b.store_name),
+    );
+    setTrendSeries(series);
+  }, [selectedMonth, selectedRegion, platformFilter, months, rawRows]);
+
+  return {
+    loading,
+    error,
+    currentMonth,
+    prevMonth,
+    rows,
+    trendMonths,
+    trendSeries,
+  };
 }
+
 
