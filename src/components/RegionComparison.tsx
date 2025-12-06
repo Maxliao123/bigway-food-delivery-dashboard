@@ -18,7 +18,12 @@ function formatMonthLabel(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
-export const RegionComparison: React.FC = () => {
+type Props = {
+  selectedRegion: string;
+  selectedMonth: string;
+};
+
+export const RegionComparison: React.FC<Props> = ({ selectedRegion, selectedMonth }) => {
   const { loading, error, months, regions, rows } = useTrendData();
 
   const { labels, datasets } = useMemo(() => {
@@ -26,8 +31,12 @@ export const RegionComparison: React.FC = () => {
       return { labels: [] as string[], datasets: [] as any[] };
     }
 
-    const lastThree = months.slice(-3);
-    const labels = regions; // X 軸：Region
+    const selectedIdx = months.indexOf(selectedMonth);
+    const lastThree =
+      selectedIdx === -1
+        ? months.slice(-3)
+        : months.slice(Math.max(0, selectedIdx - 2), selectedIdx + 1);
+    const labels = regions.filter((r) => r === selectedRegion);
 
     const baseColors = [
       'rgba(59, 130, 246, 0.7)',  // blue
@@ -42,7 +51,7 @@ export const RegionComparison: React.FC = () => {
     ];
 
     const datasets = lastThree.map((month, idx) => {
-      const data = regions.map(region => {
+      const data = labels.map(region => {
         return rows
           .filter(r => r.month === month && r.region === region)
           .reduce((sum, r) => sum + r.revenue, 0);
