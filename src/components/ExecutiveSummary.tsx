@@ -44,9 +44,10 @@ type MetricKey = 'revenue' | 'orders' | 'aov';
 type BreakdownRow = {
   key: string; // Region or Platform
   current: number;
+  share: number | null;   // 新增：當月平台佔比
   previous: number | null;
   mom: number | null;
-  yoy: number | null;
+  yoy: number | null;     // 仍保留計算，但表格不顯示
 };
 
 // ========= formatter =========
@@ -224,7 +225,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
     rawRows,
   ]);
 
-  // ========= 下方表格（Region / Platform breakdown） =========
+ // ========= 下方表格（Region / Platform breakdown） =========
   const breakdownRows: BreakdownRow[] = useMemo(() => {
     if (!periodMonths.length) return [];
 
@@ -239,7 +240,8 @@ export const ExecutiveSummary: React.FC<Props> = ({
     const rows: BreakdownRow[] = [];
 
     for (const key of groups) {
-      const filterFn = (row: SalesRow) => row.region === selectedRegion && row.platform === key;
+      const filterFn = (row: SalesRow) =>
+        row.region === selectedRegion && row.platform === key;
 
       const currAgg = sumForMonths(periodMonths, filterFn);
       const prevAgg = sumForMonths(prevMonths, filterFn);
@@ -268,13 +270,23 @@ export const ExecutiveSummary: React.FC<Props> = ({
       rows.push({
         key,
         current: currVal,
+        share: null,      // 先佔位，下面統一算
         previous: prevVal,
         mom,
         yoy,
       });
     }
 
-    return rows;
+    const totalCurrent = rows.reduce((sum, row) => sum + row.current, 0);
+
+    if (totalCurrent <= 0) {
+      return rows.map((row) => ({ ...row, share: null }));
+    }
+
+    return rows.map((row) => ({
+      ...row,
+      share: row.current / totalCurrent, // 這裡就是你要的「當月平台佔比」
+    }));
   }, [
     activeMetric,
     periodMonths,
@@ -283,6 +295,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
     rawRows,
     selectedRegion,
   ]);
+
 
   // ========= 文案 + formatter =========
   const metricConfig: Record<
@@ -467,57 +480,59 @@ export const ExecutiveSummary: React.FC<Props> = ({
 
         <div className="region-table-wrapper">
           <table className="region-table">
-            <thead>
-              <tr>
-                <th style={{ textAlign: 'left' }}>{firstColumnLabel}</th>
-                <th style={{ textAlign: 'right' }}>
-                  {periodInfo.currentLabel}
-                </th>
-                <th style={{ textAlign: 'right' }}>
-                  {periodInfo.previousLabel}
-                </th>
-                <th style={{ textAlign: 'right' }}>
-                  {periodInfo.momTitle}
-                </th>
-                <th style={{ textAlign: 'right' }}>
-                  {periodInfo.yoyTitle}
-                </th>
+           <thead>
+  <tr>
+    <th style={{ textAlign: 'left' }}>{firstColumnLabel}</th>
+    <th style={{ textAlign: 'right' }}>
+      {periodInfo.currentLabel}
+    </th>
+    <th style={{ textAlign: 'right' }}>
+      {isZh
+        ? `${periodInfo.currentLabel} 平台占比`
+        : `${periodInfo.currentLabel} share`}
+    </th>
+    <th style={{ textAlign: 'right' }}>
+      {periodInfo.previousLabel}
+    </th>
+    <th style={{ textAlign: 'right' }}>
+      {periodInfo.momTitle}
+    </th>
+
               </tr>
             </thead>
             <tbody>
-              {breakdownRows.map((row) => (
-                <tr key={row.key}>
-                  <td>{row.key}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    {activeFormatter(row.current)}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    {row.previous == null
-                      ? isZh
-                        ? '暫無數據'
-                        : 'No data'
-                      : activeFormatter(row.previous)}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span className={`region-mom ${getDeltaClass(row.mom)}`}>
-                      {row.previous == null
-                        ? isZh
-                          ? '暫無數據'
-                          : 'No data'
-                        : formatPercent(row.mom)}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span className={`region-mom ${getDeltaClass(row.yoy)}`}>
-                      {row.yoy == null
-                        ? isZh
-                          ? '暫無數據'
-                          : 'No data'
-                        : formatPercent(row.yoy)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+  {breakdownRows.map((row) => (
+    <tr key={row.key}>
+      <td>{row.key}</td>
+      <td style={{ textAlign: 'right' }}>
+        {activeFormatter(row.current)}
+      </td>
+      <td style={{ textAlign: 'right' }}>
+        {row.share == null
+          ? isZh
+            ? '暫無數據'
+            : 'No data'
+          : formatPercent(row.share)}
+      </td>
+      <td style={{ textAlign: 'right' }}>
+        {row.previous == null
+          ? isZh
+            ? '暫無數據'
+            : 'No data'
+          : activeFormatter(row.previous)}
+      </td>
+      <td style={{ textAlign: 'right' }}>
+        <span className={`region-mom ${getDeltaClass(row.mom)}`}>
+          {row.previous == null
+            ? isZh
+              ? '暫無數據'
+              : 'No data'
+            : formatPercent(row.mom)}
+        </span>
+      </td>
+    </tr>
+  ))}
+
               {breakdownRows.length === 0 && (
                 <tr>
                   <td
