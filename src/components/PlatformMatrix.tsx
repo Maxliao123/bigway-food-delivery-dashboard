@@ -900,17 +900,20 @@ export const PlatformMatrix: React.FC<Props> = ({
         </div>
 
         {/* bars */}
-        <div
-          style={{
-            position: 'relative',
-            zIndex: 1,
-            display: 'flex',
-            alignItems: 'flex-end',
-            gap: 16,
-            height: '100%',
-            paddingLeft: 40,
-          }}
-        >
+        {/* bars */}
+<div
+  style={{
+    position: 'relative',
+    zIndex: 1,
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: 16,
+    height: '100%',
+    paddingLeft: 40,
+    paddingBottom: 40, // ★ 讓柱子底部往上 40px，對齊 0% 那條線
+  }}
+>
+
           {stores.map((store) => (
             <div
               key={`${store.region}-${store.store_name}`}
@@ -925,7 +928,7 @@ export const PlatformMatrix: React.FC<Props> = ({
               <div
                 style={{
                   position: 'relative',
-                  height: 130,
+                  height: 150,
                   width: 18,
                   borderRadius: 0,
                   overflow: 'hidden',
