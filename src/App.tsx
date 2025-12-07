@@ -63,7 +63,7 @@ function App() {
   const [language, setLanguage] = useState<Lang>('en');
   const isZh = language === 'zh';
 
-  const title = isZh ? 'Food Delivery 外送儀表板' : 'Food Delivery Intelligence';
+  const title = isZh ? 'Big Way 外送數據儀表板' : 'Big Way Delivery Performance Dashboard';
   const subtitle = isZh
     ? 'BC / CA / ON 外送平台的整體表現總覽'
     : 'Strategic dashboard for BC / CA / ON delivery performance.';
