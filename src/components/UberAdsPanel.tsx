@@ -49,16 +49,6 @@ function formatCurrency2(value: number | null): string {
   );
 }
 
-function formatPercentDelta(value: number | null): { text: string; color: string } {
-  if (value == null || Number.isNaN(value)) {
-    return { text: '—', color: '#9ca3af' };
-  }
-  const pct = (value * 100).toFixed(1) + '%';
-  if (value > 0) return { text: pct, color: '#22c55e' };
-  if (value < 0) return { text: pct, color: '#f97373' };
-  return { text: pct, color: '#9ca3af' };
-}
-
 function formatRoas(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return '—';
   return value.toFixed(2) + 'x';
@@ -101,6 +91,7 @@ function monthLabel(iso: string | null, lang: Lang): string {
   return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', opts);
 }
 
+// 單店的 AD Sales = Spend × ROAS
 function calcSales(row: UberAdsMetricRow): number | null {
   const spend = row.curr.spend ?? 0;
   const roas = row.curr.roas ?? 0;
@@ -133,7 +124,7 @@ export const UberAdsPanel: React.FC<Props> = ({
     ? '無前期'
     : 'No prev month';
 
-  // ====== KPI（Total Sales / Total Spend / Avg ROAS）======
+  // ====== KPI（Total AD Sales / Total AD Spend / Avg ROAS）======
   const kpis = useMemo(() => {
     if (!rows.length) {
       return {
@@ -309,9 +300,6 @@ export const UberAdsPanel: React.FC<Props> = ({
               ? '門店層級的 Uber 廣告花費、ROAS 與效率。'
               : 'Store-level Uber ad spend, ROAS and efficiency.'}
           </p>
-          <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
-            {isZh ? '點擊欄位標題可排序。' : 'Click column headers to sort.'}
-          </p>
         </div>
 
         <div
@@ -337,11 +325,11 @@ export const UberAdsPanel: React.FC<Props> = ({
 
       {/* KPI cards */}
       {!loading && !error && (
-        <div className="kpi-grid" style={{ marginBottom: 8 }}>
-          {/* Total Sales */}
+        <div className="kpi-grid" style={{ marginBottom: 16 }}>
+          {/* Total AD Sales */}
           <div className="kpi-card">
             <div className="kpi-title">
-              {isZh ? 'Total Sales' : 'Total Sales'}
+              {isZh ? 'Total AD Sales' : 'Total AD Sales'}
             </div>
             <div className="kpi-value">
               {formatCurrency(kpis.sales.current)}
@@ -355,10 +343,10 @@ export const UberAdsPanel: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Total Spend */}
+          {/* Total AD Spend */}
           <div className="kpi-card">
             <div className="kpi-title">
-              {isZh ? 'Total Spend' : 'Total Spend'}
+              {isZh ? 'Total AD Spend' : 'Total AD Spend'}
             </div>
             <div className="kpi-value">
               {formatCurrency(kpis.spend.current)}
@@ -623,8 +611,9 @@ export const UberAdsPanel: React.FC<Props> = ({
                 <tbody>
                   {sortedRows.map((row) => {
                     const sales = calcSales(row);
-                    const spendDelta = formatPercentDelta(row.spend_delta_pct);
-                    const roasDelta = formatPercentDelta(row.roas_delta_pct);
+                    const roasDelta = row.roas_delta_pct ?? null;
+                    const roasDeltaDisplay = formatPercentSimple(roasDelta);
+                    const roasDeltaClass = getDeltaClass(roasDelta);
 
                     return (
                       <tr
@@ -661,7 +650,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                           {formatCurrency(row.curr.spend)}
                         </td>
 
-                        {/* Spend Δ%（仍然顯示在 Spend 旁邊? 你原本有這欄，如果不需要可以刪掉） */}
+                        {/* Daily spend */}
                         <td
                           style={{
                             padding: '6px 4px',
@@ -686,10 +675,11 @@ export const UberAdsPanel: React.FC<Props> = ({
                           style={{
                             padding: '6px 4px',
                             textAlign: 'right',
-                            color: roasDelta.color,
                           }}
                         >
-                          {roasDelta.text}
+                          <span className={roasDeltaClass}>
+                            {roasDeltaDisplay}
+                          </span>
                         </td>
 
                         {/* CPO */}
