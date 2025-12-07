@@ -217,12 +217,12 @@ function App() {
 
               {/* 3️⃣ Uber Ads Metrics Panel（新板塊） */}
               <section className="section-card">
-                <UberAdsPanel
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                  prevMonthIso={previousMonthIso}
-                />
+               <UberAdsPanel
+  language={language}
+  selectedRegion={selectedRegion}
+  currentMonthIso={selectedMonth}      // ✅ 用新的 prop 名稱
+  prevMonthIso={prevMonthIso}          // ✅ 用你原本算出來的前一個月變數
+/>
               </section>
             </main>
           )}
