@@ -9,6 +9,9 @@ export type Lang = 'en' | 'zh';
 export type Scope = 'BC' | 'ON' | 'CA';
 
 function App() {
+  const [selectedRegion, setSelectedRegion] = useState<Scope>('BC');
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+
   const {
     loading,
     error,
@@ -25,10 +28,7 @@ function App() {
     platformAovKpis,
     allMonths,
     rawRows,
-  } = useDashboardData();
-
-  const [selectedRegion, setSelectedRegion] = useState<Scope>('BC');
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  } = useDashboardData(selectedMonth ?? undefined, selectedRegion);
   const [language, setLanguage] = useState<Lang>('en');
   const isZh = language === 'zh';
 
