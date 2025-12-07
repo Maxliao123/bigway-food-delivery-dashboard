@@ -67,8 +67,8 @@ const STORES_PER_ROW = 10;
 // platform mix 堆疊圖：每列最多幾間店（→ 13）
 const STORES_PER_ROW_MIX = 13;
 
-// 3-month store revenue trend 的 Y 軸刻度（由上到下）
-const TREND_TICKS = [1, 0.75, 0.5, 0.25, 0];
+// 3-month store revenue trend 的 Y 軸刻度（由下到上）
+const TREND_TICKS = [0, 0.25, 0.5, 0.75, 1];
 const TREND_PLOT_HEIGHT = 160; // 實際繪圖高度
 const TREND_Y_AXIS_WIDTH = 56; // Y 軸文字寬度
 
@@ -608,13 +608,13 @@ export const PlatformMatrix: React.FC<Props> = ({
                           minWidth: TREND_Y_AXIS_WIDTH,
                         }}
                       >
-                        {TREND_TICKS.map((r) => (
+                        {TREND_TICKS.map((t) => (
                           <div
-                            key={r}
+                            key={t}
                             style={{
                               position: 'absolute',
                               right: 0,
-                              bottom: `${(1 - r) * 100}%`,
+                              bottom: `${t * 100}%`,
                               transform: 'translateY(50%)',
                               fontSize: 9,
                               color: '#6b7280',
@@ -622,7 +622,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                               width: '100%',
                             }}
                           >
-                            {formatCurrency(Math.round(maxTrendValue * r))}
+                            {formatCurrency(Math.round(maxTrendValue * t))}
                           </div>
                         ))}
                       </div>
@@ -636,14 +636,14 @@ export const PlatformMatrix: React.FC<Props> = ({
                         }}
                       >
                         {/* 橫向 grid 線（包含 $0 線） */}
-                        {TREND_TICKS.map((r) => (
+                        {TREND_TICKS.map((t) => (
                           <div
-                            key={r}
+                            key={t}
                             style={{
                               position: 'absolute',
                               left: 0,
                               right: 0,
-                              bottom: `${(1 - r) * 100}%`,
+                              bottom: `${t * 100}%`,
                               borderTop: '1px solid #111827',
                             }}
                           />
