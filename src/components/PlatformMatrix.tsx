@@ -392,7 +392,11 @@ export const PlatformMatrix: React.FC<Props> = ({
             <thead>
               <tr style={{ borderBottom: '1px solid #374151', color: '#9ca3af' }}>
                 <th
-                  style={{ textAlign: 'left', padding: '6px 4px', cursor: 'pointer' }}
+                  style={{
+                    textAlign: 'left',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
                   onClick={() => handleSort('store_name')}
                 >
                   {isZh ? '門店' : 'Store'}
@@ -554,21 +558,66 @@ export const PlatformMatrix: React.FC<Props> = ({
                     margin: '12px 0 10px',
                   }}
                 />
-                <div style={{ marginBottom: 8 }}>
+
+                {/* 標題 + 副標題 + 右上角 Legend */}
+                <div
+                  style={{
+                    marginBottom: 8,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-end',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: '#e5e7eb',
+                        marginBottom: 2,
+                      }}
+                    >
+                      {isZh
+                        ? '近三個月門店營收趨勢'
+                        : '3-month store revenue trend'}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                      {isZh ? '平台：' : 'Platform: '}
+                      {platformLabel(platformFilter, isZh)}
+                    </div>
+                  </div>
+
+                  {/* Legend 靠右上 */}
                   <div
                     style={{
-                      fontSize: 12,
-                      color: '#e5e7eb',
-                      marginBottom: 2,
+                      display: 'flex',
+                      gap: 12,
+                      fontSize: 10,
+                      color: '#9ca3af',
+                      flexWrap: 'wrap',
                     }}
                   >
-                    {isZh
-                      ? '近三個月門店營收趨勢'
-                      : '3-month store revenue trend'}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                    {isZh ? '平台：' : 'Platform: '}
-                    {platformLabel(platformFilter, isZh)}
+                    {trendMonths.map((m, idx) => (
+                      <div
+                        key={m}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 9999,
+                            backgroundColor: legendColors[idx],
+                          }}
+                        />
+                        <span>{monthLabel(m, language)}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -593,6 +642,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                         gap: 12,
                         height: '100%',
                         paddingRight: 8,
+                        paddingLeft: 24, // 整排柱狀圖往右移一點
                       }}
                     >
                       {/* bar groups：這一列的門店 */}
@@ -627,7 +677,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                               {series.values.map((rawV, idx) => {
                                 const v = Number(rawV || 0);
 
-                                // 如果該月完全沒有數值，就不畫灰色小 bar，直接空白
+                                // 沒有數值就留白
                                 if (!v || v <= 0) {
                                   return (
                                     <div
@@ -639,7 +689,7 @@ export const PlatformMatrix: React.FC<Props> = ({
 
                                 const ratio =
                                   maxTrendValue > 0 ? v / maxTrendValue : 0;
-                                const height = ratio * 150; // 不再有 4px 最小高度
+                                const height = ratio * 150;
                                 const isLatest = idx === latestIndex;
                                 const rounded = Math.round(v);
 
@@ -665,7 +715,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                                       <span
                                         style={{
                                           position: 'absolute',
-                                          bottom: height + 10,
+                                          bottom: height + 10, // 再往上拉一點，讓 COO 更好讀
                                           left: '50%',
                                           transform: 'translateX(-50%)',
                                           fontSize: 9,
@@ -701,35 +751,6 @@ export const PlatformMatrix: React.FC<Props> = ({
                   </div>
                 ))}
 
-                {/* 月份 legend */}
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 12,
-                    fontSize: 10,
-                    color: '#9ca3af',
-                    marginTop: 4,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  {trendMonths.map((m, idx) => (
-                    <div
-                      key={m}
-                      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                    >
-                      <span
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 9999,
-                          backgroundColor: legendColors[idx],
-                        }}
-                      />
-                      <span>{monthLabel(m, language)}</span>
-                    </div>
-                  ))}
-                </div>
-
                 {/* === Current-month platform mix by store（下方堆疊圖） === */}
                 {chunkedPlatformShare.length > 0 && (
                   <>
@@ -740,22 +761,75 @@ export const PlatformMatrix: React.FC<Props> = ({
                         margin: '16px 0 10px',
                       }}
                     />
-                    <div style={{ marginBottom: 8 }}>
+
+                    {/* 標題 + 副標題 + 右上角 Legend */}
+                    <div
+                      style={{
+                        marginBottom: 8,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-end',
+                        gap: 8,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: '#e5e7eb',
+                            marginBottom: 2,
+                          }}
+                        >
+                          {isZh
+                            ? '當月平台營收佔比（門店）'
+                            : 'Current-month platform mix by store'}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                          {isZh
+                            ? '每間門店的 Uber / Fantuan / Doordash 營收百分比（加總為 100%）。'
+                            : 'Per-store revenue share by Uber / Fantuan / Doordash (sum to 100%).'}
+                        </div>
+                      </div>
+
+                      {/* Platform legend 靠右上 */}
                       <div
                         style={{
-                          fontSize: 12,
-                          color: '#e5e7eb',
-                          marginBottom: 2,
+                          display: 'flex',
+                          gap: 12,
+                          fontSize: 10,
+                          color: '#9ca3af',
+                          flexWrap: 'wrap',
                         }}
                       >
-                        {isZh
-                          ? '當月平台營收佔比（門店）'
-                          : 'Current-month platform mix by store'}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                        {isZh
-                          ? '每間門店的 Uber / Fantuan / Doordash 營收百分比（加總為 100%）。'
-                          : 'Per-store revenue share by Uber / Fantuan / Doordash (sum to 100%).'}
+                        {(['UBER', 'Fantuan', 'Doordash'] as const).map((p) => (
+                          <div
+                            key={p}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: 9999,
+                                backgroundColor:
+                                  PLATFORM_BAR_HIGHLIGHT[
+                                    p as MatrixPlatformFilter
+                                  ],
+                                opacity:
+                                  platformFilter === 'ALL' ||
+                                  platformFilter === p
+                                    ? 1
+                                    : 0.35,
+                              }}
+                            />
+                            <span>{p}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -772,7 +846,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                           height: 200,
                         }}
                       >
-                        {/* 0% / 50% / 100% grid 線（仍保留） */}
+                        {/* 0% / 50% / 100% grid 線 */}
                         <div
                           style={{
                             position: 'absolute',
@@ -797,7 +871,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                           ))}
                         </div>
 
-                        {/* Y 軸線 + 文字（移到左側） */}
+                        {/* Y 軸線 + 文字（在左側） */}
                         <div
                           style={{
                             position: 'absolute',
@@ -934,46 +1008,6 @@ export const PlatformMatrix: React.FC<Props> = ({
                         </div>
                       </div>
                     ))}
-
-                    {/* platform legend */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 12,
-                        fontSize: 10,
-                        color: '#9ca3af',
-                        marginTop: 6,
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      {(['UBER', 'Fantuan', 'Doordash'] as const).map((p) => (
-                        <div
-                          key={p}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: 9999,
-                              backgroundColor:
-                                PLATFORM_BAR_HIGHLIGHT[
-                                  p as MatrixPlatformFilter
-                                ],
-                              opacity:
-                                platformFilter === 'ALL' || platformFilter === p
-                                  ? 1
-                                  : 0.35,
-                            }}
-                          />
-                          <span>{p}</span>
-                        </div>
-                      ))}
-                    </div>
                   </>
                 )}
               </>
@@ -983,6 +1017,7 @@ export const PlatformMatrix: React.FC<Props> = ({
     </section>
   );
 };
+
 
 
 
