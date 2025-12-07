@@ -137,6 +137,7 @@ export const PlatformMatrix: React.FC<Props> = ({
     rows,
     trendMonths,
     trendSeries,
+    storePlatformShare,
   } = usePlatformMatrix(selectedRegion, selectedMonth, platformFilter);
 
   const [sort, setSort] = useState<SortState>({
@@ -749,6 +750,180 @@ export const PlatformMatrix: React.FC<Props> = ({
                     </div>
                   ))}
                 </div>
+
+                {/* 當月各平台營收佔比（堆疊柱狀圖） */}
+                {storePlatformShare && storePlatformShare.length > 0 && (
+                  <>
+                    <div
+                      style={{
+                        height: 1,
+                        background: '#111827',
+                        margin: '16px 0 10px',
+                      }}
+                    />
+                    <div style={{ marginBottom: 8 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#e5e7eb',
+                          marginBottom: 2,
+                        }}
+                      >
+                        {isZh
+                          ? '當月平台營收佔比（門店）'
+                          : 'Current-month platform mix by store'}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                        {isZh
+                          ? '每間門店的 Uber / Fantuan / Doordash 營收百分比（加總為 100%）。'
+                          : 'Per-store revenue share by Uber / Fantuan / Doordash (sum to 100%).'}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        position: 'relative',
+                        padding: '10px 0 4px',
+                        overflowX: 'auto',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-end',
+                          gap: 20,
+                          height: 160,
+                          paddingRight: 8,
+                        }}
+                      >
+                        {storePlatformShare.map((store) => (
+                          <div
+                            key={`${store.region}-${store.store_name}`}
+                            style={{
+                              minWidth: 52,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'flex-end',
+                            }}
+                          >
+                            {/* 100% 高度的堆疊柱狀 */}
+                            <div
+                              style={{
+                                position: 'relative',
+                                height: 130,
+                                width: 18,
+                                borderRadius: 9999,
+                                overflow: 'hidden',
+                                display: 'flex',
+                                flexDirection: 'column-reverse',
+                                background:
+                                  'linear-gradient(to top, #020617, #020617)',
+                                border: '1px solid #111827',
+                              }}
+                            >
+                              {store.shares.map((s) => {
+                                const baseColor =
+                                  PLATFORM_BAR_HIGHLIGHT[
+                                    s.platform as MatrixPlatformFilter
+                                  ] ?? '#4b5563';
+
+                                const isActive =
+                                  platformFilter === 'ALL' ||
+                                  platformFilter === s.platform;
+
+                                return (
+                                  <div
+                                    key={s.platform}
+                                    style={{
+                                      position: 'relative',
+                                      height: `${Math.max(
+                                        s.share * 100,
+                                        4,
+                                      )}%`,
+                                      backgroundColor: baseColor,
+                                      opacity: isActive ? 1 : 0.35,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                    }}
+                                  >
+                                    {s.share >= 0.08 && (
+                                      <span
+                                        style={{
+                                          fontSize: 9,
+                                          color: '#f9fafb',
+                                          textShadow:
+                                            '0 1px 2px rgba(0,0,0,0.6)',
+                                        }}
+                                      >
+                                        {(s.share * 100).toFixed(0)}%
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* 店名 */}
+                            <div
+                              style={{
+                                marginTop: 4,
+                                fontSize: 10,
+                                color: '#9ca3af',
+                                textAlign: 'center',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {store.store_name}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* platform legend */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 12,
+                          fontSize: 10,
+                          color: '#9ca3af',
+                          marginTop: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        {(['UBER', 'Fantuan', 'Doordash'] as const).map((p) => (
+                          <div
+                            key={p}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: 9999,
+                                backgroundColor:
+                                  PLATFORM_BAR_HIGHLIGHT[
+                                    p as MatrixPlatformFilter
+                                  ],
+                                opacity:
+                                  platformFilter === 'ALL' ||
+                                  platformFilter === p
+                                    ? 1
+                                    : 0.35,
+                              }}
+                            />
+                            <span>{p}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </>
             )}
         </div>
@@ -756,6 +931,7 @@ export const PlatformMatrix: React.FC<Props> = ({
     </section>
   );
 };
+
 
 
 
