@@ -53,7 +53,7 @@ function momCellStyle(mom: number | null): React.CSSProperties {
 // 灰階：前兩個月份用
 const NEUTRAL_BAR_COLORS = ['#4b5563', '#6b7280'];
 
-// 各平台「最新月份」高亮色，和 3-month platform performance trend 配色一致
+// 各平台「最新月份」高亮色
 const PLATFORM_BAR_HIGHLIGHT: Record<MatrixPlatformFilter, string> = {
   ALL: '#f97316', // 橘
   UBER: '#3b82f6', // 藍
@@ -64,8 +64,8 @@ const PLATFORM_BAR_HIGHLIGHT: Record<MatrixPlatformFilter, string> = {
 // 3-month store revenue trend：每列最多顯示幾間店
 const STORES_PER_ROW = 10;
 
-// platform mix 堆疊圖：每列最多幾間店
-const STORES_PER_ROW_MIX = 12;
+// platform mix 堆疊圖：每列最多幾間店（→ 13）
+const STORES_PER_ROW_MIX = 13;
 
 type SortKey =
   | 'store_name'
@@ -247,9 +247,10 @@ export const PlatformMatrix: React.FC<Props> = ({
     [trendMonths, latestIndex, highlightColor],
   );
 
-  // platform mix：依列分 chunk（每列最多 12 間店）
+  // platform mix：依列分 chunk（每列最多 13 間店）
   const chunkedPlatformShare = useMemo(() => {
-    if (!storePlatformShare || !storePlatformShare.length) return [] as typeof storePlatformShare[];
+    if (!storePlatformShare || !storePlatformShare.length)
+      return [] as typeof storePlatformShare[];
     const chunks: typeof storePlatformShare[] = [];
     for (let i = 0; i < storePlatformShare.length; i += STORES_PER_ROW_MIX) {
       chunks.push(storePlatformShare.slice(i, i + STORES_PER_ROW_MIX));
@@ -584,13 +585,13 @@ export const PlatformMatrix: React.FC<Props> = ({
                       marginTop: rowIndex > 0 ? 8 : 0,
                     }}
                   >
-                    {/* 橫向 grid 線：在 bar 背後 */}
+                    {/* 橫向 grid 線：在 bar 背後（bottom 改為 60，讓 0 線跟柱子底部更齊） */}
                     <div
                       style={{
                         position: 'absolute',
                         top: 10,
                         right: 0,
-                        bottom: 40, // 預留 0 線以下空間放店名
+                        bottom: 60,
                         left: 60,
                         pointerEvents: 'none',
                         display: 'flex',
@@ -674,7 +675,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                                 const v = Number(rawV || 0);
                                 const ratio =
                                   maxTrendValue > 0 ? v / maxTrendValue : 0;
-                                const height = Math.max(4, ratio * 140); // 140px 留空間放標籤
+                                const height = Math.max(4, ratio * 140);
                                 const isLatest = idx === latestIndex;
                                 const rounded = Math.round(v);
 
@@ -807,7 +808,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                           height: 200,
                         }}
                       >
-                        {/* 0% / 50% / 100% grid，放在 bar 後面 */}
+                        {/* 0% / 50% / 100% grid */}
                         <div
                           style={{
                             position: 'absolute',
@@ -832,7 +833,20 @@ export const PlatformMatrix: React.FC<Props> = ({
                           ))}
                         </div>
 
-                        {/* Y 軸在右側 */}
+                        {/* 垂直 y 軸線（文字在左側） */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 10,
+                            right: 18,
+                            bottom: 40,
+                            width: 0,
+                            borderLeft: '1px solid #111827',
+                            zIndex: 1,
+                          }}
+                        />
+
+                        {/* Y 軸刻度文字，往左縮一點，貼在軸線左側 */}
                         <div
                           style={{
                             position: 'absolute',
@@ -846,6 +860,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                             fontSize: 9,
                             color: '#6b7280',
                             textAlign: 'right',
+                            paddingRight: 18, // 文字靠在軸線左邊
                             zIndex: 1,
                           }}
                         >
@@ -891,7 +906,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                                 }}
                               >
                                 {store.shares
-                                  .filter((s) => s.share > 0) // share = 0 的平台不畫（避免 Doordash 假 bar）
+                                  .filter((s) => s.share > 0)
                                   .map((s) => {
                                     const baseColor =
                                       PLATFORM_BAR_HIGHLIGHT[
@@ -926,7 +941,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                                         {s.share >= 0.08 && (
                                           <span
                                             style={{
-                                              fontSize: 9,
+                                              fontSize: 8, // 數字再小一點
                                               color: labelColor,
                                               textShadow:
                                                 '0 1px 2px rgba(0,0,0,0.4)',
@@ -1006,6 +1021,7 @@ export const PlatformMatrix: React.FC<Props> = ({
     </section>
   );
 };
+
 
 
 
