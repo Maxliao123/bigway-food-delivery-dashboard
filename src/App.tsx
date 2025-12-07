@@ -4,6 +4,8 @@ import './App.css';
 import { useDashboardData } from './hooks/useDashboardData';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PlatformMatrix } from './components/PlatformMatrix';
+// ⭐ 新增：Uber Ads 板塊
+import { UberAdsPanel } from './components/UberAdsPanel';
 
 export type Lang = 'en' | 'zh';
 export type Scope = 'BC' | 'ON' | 'CA';
@@ -29,6 +31,7 @@ function App() {
     allMonths,
     rawRows,
   } = useDashboardData(selectedMonth ?? undefined, selectedRegion);
+
   const [language, setLanguage] = useState<Lang>('en');
   const isZh = language === 'zh';
 
@@ -53,16 +56,28 @@ function App() {
     return null;
   }, [allMonths, selectedMonth]);
 
-const monthLabel = (iso: string) => {
-  const short = iso.slice(0, 7); // "YYYY-MM"
-  const [year, month] = short.split('-');
-  const mNum = Number(month);
-  if (!year || !mNum || Number.isNaN(mNum)) return short;
+  const monthLabel = (iso: string) => {
+    const short = iso.slice(0, 7); // "YYYY-MM"
+    const [year, month] = short.split('-');
+    const mNum = Number(month);
+    if (!year || !mNum || Number.isNaN(mNum)) return short;
 
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${MONTHS[mNum - 1]} ${year}`;
-};
+    const MONTHS = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return `${MONTHS[mNum - 1]} ${year}`;
+  };
 
   return (
     <div className="app-root">
@@ -161,7 +176,7 @@ const monthLabel = (iso: string) => {
           </div>
         )}
 
-        {/* ===== Main Dashboard (only 2 sections kept) ===== */}
+        {/* ===== Main Dashboard ===== */}
         {!loading &&
           !error &&
           revenueKpi &&
@@ -194,6 +209,15 @@ const monthLabel = (iso: string) => {
               {/* 2️⃣ Platform Velocity Matrix */}
               <section className="section-card">
                 <PlatformMatrix
+                  language={language}
+                  selectedRegion={selectedRegion}
+                  selectedMonth={selectedMonth}
+                />
+              </section>
+
+              {/* 3️⃣ Uber Ads Metrics Panel（新板塊） */}
+              <section className="section-card">
+                <UberAdsPanel
                   language={language}
                   selectedRegion={selectedRegion}
                   selectedMonth={selectedMonth}
