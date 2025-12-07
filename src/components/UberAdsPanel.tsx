@@ -133,7 +133,7 @@ export const UberAdsPanel: React.FC<Props> = ({
           </span>
           <span>
             {isZh ? '月份：' : 'Month: '}
-            {currentMonthLabel}
+            {monthText}
           </span>
         </div>
       </div>
