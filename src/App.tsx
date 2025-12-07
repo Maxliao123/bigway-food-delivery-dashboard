@@ -1,18 +1,17 @@
-// src/App.tsx
-import React, { useState } from 'react';
+/ src/App.tsx
+import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { useDashboardData } from './hooks/useDashboardData';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PlatformMatrix } from './components/PlatformMatrix';
-import { RevenueTrend } from './components/RevenueTrend';
-import { RegionComparison } from './components/RegionComparison';
-import { RegionHeatmap } from './components/RegionHeatmap';
-import { StoreHeatmap } from './components/StoreHeatmap';
 
 export type Lang = 'en' | 'zh';
-export type Scope = 'overview' | 'BC' | 'ON' | 'CA';
+export type Scope = 'BC' | 'ON' | 'CA';
 
 function App() {
+  const [selectedRegion, setSelectedRegion] = useState<Scope>('BC');
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+
   const {
     loading,
     error,
@@ -29,10 +28,7 @@ function App() {
     platformAovKpis,
     allMonths,
     rawRows,
-  } = useDashboardData();
-
-  const [selectedRegion, setSelectedRegion] = useState<string | null>('BC');
-
+  } = useDashboardData(selectedMonth ?? undefined, selectedRegion);
   const [language, setLanguage] = useState<Lang>('en');
   const isZh = language === 'zh';
 
@@ -43,6 +39,30 @@ function App() {
   const metaText = isZh
     ? '資料來源 · Supabase · 自動更新'
     : 'Data source · Supabase · Auto-refreshed';
+
+  useEffect(() => {
+    if (allMonths.length && !selectedMonth) {
+      setSelectedMonth(allMonths[allMonths.length - 1]);
+    }
+  }, [allMonths, selectedMonth]);
+
+  const prevSelectableMonth = useMemo(() => {
+    if (!selectedMonth) return null;
+    const idx = allMonths.indexOf(selectedMonth);
+    if (idx > 0) return allMonths[idx - 1];
+    return null;
+  }, [allMonths, selectedMonth]);
+
+const monthLabel = (iso: string) => {
+  const short = iso.slice(0, 7); // "YYYY-MM"
+  const [year, month] = short.split('-');
+  const mNum = Number(month);
+  if (!year || !mNum || Number.isNaN(mNum)) return short;
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${MONTHS[mNum - 1]} ${year}`;
+};
 
   return (
     <div className="app-root">
@@ -55,7 +75,6 @@ function App() {
             </p>
             <h1 className="app-title">{title}</h1>
             <p className="app-subtitle">{subtitle}</p>
-            {/* ⚠️ 這裡不再放 Overview / BC / ON / CA 的 toggle 了 */}
           </div>
 
           <div className="app-meta">
@@ -82,6 +101,52 @@ function App() {
           </div>
         </header>
 
+        {/* ===== Global Filters ===== */}
+        {!loading && !error && allMonths.length > 0 && (
+          <div className="filter-bar">
+            <div className="filter-group">
+              <span className="filter-label">{isZh ? '區域' : 'Region'}</span>
+              <div className="scope-toggle">
+                {(['BC', 'ON', 'CA'] as Scope[]).map((region) => (
+                  <button
+                    key={region}
+                    type="button"
+                    className={
+                      'scope-pill' +
+                      (selectedRegion === region ? ' scope-pill-active' : '')
+                    }
+                    onClick={() => setSelectedRegion(region)}
+                  >
+                    {region}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="filter-group">
+              <span className="filter-label">
+                {isZh ? '分析月份' : 'Analysis month'}
+              </span>
+              <select
+                className="filter-select"
+                value={selectedMonth ?? ''}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+              >
+                {allMonths.map((m) => (
+                  <option key={m} value={m}>
+                    {monthLabel(m)}
+                  </option>
+                ))}
+              </select>
+              {prevSelectableMonth && (
+                <span className="filter-hint">
+                  {isZh ? '對比' : 'vs'} {monthLabel(prevSelectableMonth)}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ===== Loading / Error ===== */}
         {loading && (
           <div className="status status-loading">
@@ -96,64 +161,46 @@ function App() {
           </div>
         )}
 
-        {/* ===== Main Dashboard ===== */}
-        {!loading && !error && revenueKpi && ordersKpi && aovKpi && (
-          <main className="dashboard-grid">
-            {/* 1️⃣ KPI + Regional / Platform summary */}
-            <section className="section-card section-kpi">
-              <ExecutiveSummary
-                language={language}
-                currentMonth={currentMonth}
-                prevMonth={prevMonth}
-                revenueKpi={revenueKpi}
-                ordersKpi={ordersKpi}
-                aovKpi={aovKpi}
-                regionalRevenueKpis={regionalRevenueKpis}
-                regionalOrdersKpis={regionalOrdersKpis}
-                regionalAovKpis={regionalAovKpis}
-                platformRevenueKpis={platformRevenueKpis}
-                platformOrdersKpis={platformOrdersKpis}
-                platformAovKpis={platformAovKpis}
-                allMonths={allMonths}
-                rawRows={rawRows}
-              />
-            </section>
+        {/* ===== Main Dashboard (only 2 sections kept) ===== */}
+        {!loading &&
+          !error &&
+          revenueKpi &&
+          ordersKpi &&
+          aovKpi &&
+          selectedMonth && (
+            <main className="dashboard-grid">
+              {/* 1️⃣ KPI + Regional / Platform summary */}
+              <section className="section-card section-kpi">
+                <ExecutiveSummary
+                  language={language}
+                  selectedRegion={selectedRegion}
+                  selectedMonth={selectedMonth}
+                  currentMonth={currentMonth}
+                  prevMonth={prevMonth}
+                  revenueKpi={revenueKpi}
+                  ordersKpi={ordersKpi}
+                  aovKpi={aovKpi}
+                  regionalRevenueKpis={regionalRevenueKpis}
+                  regionalOrdersKpis={regionalOrdersKpis}
+                  regionalAovKpis={regionalAovKpis}
+                  platformRevenueKpis={platformRevenueKpis}
+                  platformOrdersKpis={platformOrdersKpis}
+                  platformAovKpis={platformAovKpis}
+                  allMonths={allMonths}
+                  rawRows={rawRows}
+                />
+              </section>
 
-            {/* 2️⃣ Platform Velocity Matrix */}
-            <section className="section-card">
-              <PlatformMatrix language={language} />
-            </section>
-
-            {/* 3️⃣ Revenue MoM Heatmap（Region + Store Drilldown） */}
-            <section className="section-card section-heatmap">
-              <h2 className="section-title">
-                {isZh ? '營收月成長 Heatmap' : 'Revenue MoM Heatmap'}
-              </h2>
-              <p className="section-subtitle">
-                {isZh
-                  ? '上：各區 MoM 表現；下：選定區域的門店明細。'
-                  : 'Top: Region-level MoM performance. Bottom: Store-level breakdown.'}
-              </p>
-
-              <RegionHeatmap
-                language={language}
-                selectedRegion={selectedRegion}
-                onSelectRegion={setSelectedRegion}
-              />
-              <div className="heatmap-divider" />
-              <StoreHeatmap language={language} selectedRegion={selectedRegion} />
-            </section>
-
-            {/* 4️⃣ Revenue Trend & Region Comparison */}
-            <section className="section-card section-charts">
-              <RevenueTrend />
-            </section>
-
-            <section className="section-card section-charts">
-              <RegionComparison />
-            </section>
-          </main>
-        )}
+              {/* 2️⃣ Platform Velocity Matrix */}
+              <section className="section-card">
+                <PlatformMatrix
+                  language={language}
+                  selectedRegion={selectedRegion}
+                  selectedMonth={selectedMonth}
+                />
+              </section>
+            </main>
+          )}
       </div>
     </div>
   );
