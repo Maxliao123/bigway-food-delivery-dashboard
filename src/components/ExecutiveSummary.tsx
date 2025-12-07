@@ -167,8 +167,8 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
   };
   const FALLBACK_COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
 
-  // 三條線時字級再小一點，避免互相擠壓
-  const labelFontSize = series.length >= 3 ? 9 : 10;
+  // 數值標籤字級與上方 Platform breakdown 表格一致
+  const labelFontSize = 12;
 
   // 避免同一個 x 位置上標籤互相重疊
   const usedLabelY: Record<number, number[]> = {};
@@ -233,7 +233,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
             x={getX(idx)}
             y={margin.top + chartHeight + 18}
             textAnchor="middle"
-            fontSize={11}
+            fontSize={12}
             fill="rgba(255,255,255,0.55)"
           >
             {monthLabelFn(m)}
