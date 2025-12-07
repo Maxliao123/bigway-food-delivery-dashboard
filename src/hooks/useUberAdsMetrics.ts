@@ -1,6 +1,6 @@
 // src/hooks/useUberAdsMetrics.ts
 import { useEffect, useState } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 
 type UberAdsRow = {
   region: string;
