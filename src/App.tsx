@@ -221,6 +221,7 @@ function App() {
                   language={language}
                   selectedRegion={selectedRegion}
                   selectedMonth={selectedMonth}
+                  prevMonthIso={previousMonthIso}
                 />
               </section>
             </main>
