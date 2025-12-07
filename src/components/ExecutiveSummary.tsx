@@ -233,7 +233,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
             x={getX(idx)}
             y={margin.top + chartHeight + 18}
             textAnchor="middle"
-            fontSize={12}
+            fontSize={4}
             fill="rgba(255,255,255,0.55)"
           >
             {monthLabelFn(m)}
