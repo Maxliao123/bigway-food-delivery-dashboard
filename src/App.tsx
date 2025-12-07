@@ -178,7 +178,7 @@ function App() {
     }
   }, [allMonths, selectedMonth]);
 
-  // 用「下拉選單」算出的上一個月 → 拿來顯示「vs XXX」，也給 Uber Ads 用
+  // 用「目前下拉選單選到的月份」往前找一格當作對比月份
   const prevSelectableMonth = useMemo(() => {
     if (!selectedMonth) return null;
     const idx = allMonths.indexOf(selectedMonth);
@@ -531,14 +531,16 @@ function App() {
               </section>
 
               {/* 3️⃣ Uber Ads Metrics Panel */}
-              <section className="section-card">
-                <UberAdsPanel
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  currentMonthIso={selectedMonth}          // ✅ 直接吃下拉選單的月份
-                  prevMonthIso={prevSelectableMonth}       // ✅ 用下拉選單算出的「對比月份」
-                />
-              </section>
+            <section className="section-card">
+  <UberAdsPanel
+    language={language}
+    selectedRegion={selectedRegion}
+    // ✅ 直接用 Analysis month 下拉選到的那個月
+    currentMonthIso={selectedMonth}
+    // ✅ 對比月份 = 在 allMonths 中的前一個
+    prevMonthIso={prevSelectableMonth}
+  />
+</section>
             </main>
           )}
       </div>
