@@ -33,7 +33,9 @@ function formatCurrency2(value: number | null): string {
   );
 }
 
-function formatPercentDelta(value: number | null): { text: string; color: string } {
+function formatPercentDelta(
+  value: number | null,
+): { text: string; color: string } {
   if (value == null || Number.isNaN(value)) {
     return { text: '—', color: '#9ca3af' };
   }
@@ -63,7 +65,7 @@ export const UberAdsPanel: React.FC<Props> = ({
   language,
   selectedRegion,
   currentMonthIso,
-  prevMonthIso,
+  prevMonthIso, // 目前沒顯示，但留著給 hook 用
 }) => {
   const isZh = language === 'zh';
 
@@ -73,16 +75,15 @@ export const UberAdsPanel: React.FC<Props> = ({
     prevMonthIso,
   );
 
+  // 依當月 spend 由高到低排序
   const sortedRows: UberAdsMetricRow[] = useMemo(() => {
     const copy = [...rows];
-    // 依當月 spend 由高到低排序
-    copy.sort(
-      (a, b) => (b.curr.spend ?? 0) - (a.curr.spend ?? 0),
-    );
+    copy.sort((a, b) => (b.curr.spend ?? 0) - (a.curr.spend ?? 0));
     return copy;
   }, [rows]);
 
-  const monthText = monthLabel(currentMonthIso, language);
+  // 標題右側要顯示的月份：一律用「目前分析月份」
+  const currentMonthLabel = monthLabel(currentMonthIso, language);
 
   return (
     <section
@@ -127,10 +128,12 @@ export const UberAdsPanel: React.FC<Props> = ({
           }}
         >
           <span>
-            {isZh ? 'Region：' : 'Region: '}{selectedRegion || '—'}
+            {isZh ? 'Region：' : 'Region: '}
+            {selectedRegion || '—'}
           </span>
           <span>
-            {isZh ? '月份：' : 'Month: '}{monthText}
+            {isZh ? '月份：' : 'Month: '}
+            {currentMonthLabel}
           </span>
         </div>
       </div>
@@ -319,3 +322,4 @@ export const UberAdsPanel: React.FC<Props> = ({
     </section>
   );
 };
+
