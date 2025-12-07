@@ -170,6 +170,8 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
   const fontScale = 0.3;
   const labelFontSize = 12 * fontScale;
   const axisFontSize = 12 * fontScale;
+  // 數值標籤字級與上方 Platform breakdown 表格一致
+  const labelFontSize = 12;
 
   // 避免同一個 x 位置上標籤互相重疊
   const usedLabelY: Record<number, number[]> = {};
@@ -235,6 +237,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
             y={margin.top + chartHeight + 18}
             textAnchor="middle"
             fontSize={axisFontSize}
+            fontSize={12}
             fill="rgba(255,255,255,0.55)"
           >
             {monthLabelFn(m)}
