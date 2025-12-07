@@ -999,7 +999,14 @@ export const PlatformMatrix: React.FC<Props> = ({
   </>
 )}
 
-
+ </>
+)}
+            </div>
+  
+)}
+      </section>
+    );
+  };
 
 
 
