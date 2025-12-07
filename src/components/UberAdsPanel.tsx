@@ -1,7 +1,8 @@
 // src/components/UberAdsPanel.tsx
 import React, { useMemo } from 'react';
 import type { Lang } from '../App';
-import { useUberAdsMetrics, UberAdsMetricRow } from '../hooks/useUberAdsMetrics';
+import { useUberAdsMetrics } from '../hooks/useUberAdsMetrics';
+import type { UberAdsMetricRow } from '../hooks/useUberAdsMetrics';
 
 type Props = {
   language: Lang;
