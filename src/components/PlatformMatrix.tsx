@@ -752,271 +752,253 @@ export const PlatformMatrix: React.FC<Props> = ({
                 ))}
 
                 {/* === Current-month platform mix by store（下方堆疊圖） === */}
-                {chunkedPlatformShare.length > 0 && (
-                  <>
-                    <div
-                      style={{
-                        height: 1,
-                        background: '#111827',
-                        margin: '16px 0 10px',
-                      }}
-                    />
+               {chunkedPlatformShare.length > 0 && (
+  <>
+    <div
+      style={{
+        height: 1,
+        background: '#111827',
+        margin: '16px 0 10px',
+      }}
+    />
 
-                    {/* 標題 + 副標題 + 右上角 Legend */}
-                    <div
-                      style={{
-                        marginBottom: 8,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-end',
-                        gap: 8,
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: '#e5e7eb',
-                            marginBottom: 2,
-                          }}
-                        >
-                          {isZh
-                            ? '當月平台營收佔比（門店）'
-                            : 'Current-month platform mix by store'}
-                        </div>
-                        <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                          {isZh
-                            ? '每間門店的 Uber / Fantuan / Doordash 營收百分比（加總為 100%）。'
-                            : 'Per-store revenue share by Uber / Fantuan / Doordash (sum to 100%).'}
-                        </div>
-                      </div>
+    {/* 標題 + 副標題 + 右上角 Legend */}
+    <div
+      style={{
+        marginBottom: 8,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        gap: 8,
+        flexWrap: 'wrap',
+      }}
+    >
+      <div>
+        <div
+          style={{
+            fontSize: 12,
+            color: '#e5e7eb',
+            marginBottom: 2,
+          }}
+        >
+          {isZh
+            ? '當月平台營收佔比（門店）'
+            : 'Current-month platform mix by store'}
+        </div>
+        <div style={{ fontSize: 11, color: '#9ca3af' }}>
+          {isZh
+            ? '每間門店的 Uber / Fantuan / Doordash 營收百分比（加總為 100%）。'
+            : 'Per-store revenue share by Uber / Fantuan / Doordash (sum to 100%).'}
+        </div>
+      </div>
 
-                      {/* Platform legend 靠右上 */}
+      {/* Platform legend 靠右上 */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 12,
+          fontSize: 10,
+          color: '#9ca3af',
+          flexWrap: 'wrap',
+        }}
+      >
+        {(['UBER', 'Fantuan', 'Doordash'] as const).map((p) => (
+          <div
+            key={p}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 9999,
+                backgroundColor:
+                  PLATFORM_BAR_HIGHLIGHT[p as MatrixPlatformFilter],
+                opacity:
+                  platformFilter === 'ALL' || platformFilter === p ? 1 : 0.35,
+              }}
+            />
+            <span>{p}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {chunkedPlatformShare.map((stores, rowIndex) => (
+      <div
+        key={rowIndex}
+        style={{
+          position: 'relative',
+          padding: '10px 0 18px',
+          overflowX: 'hidden',
+          borderTop: rowIndex > 0 ? '1px dashed #111827' : undefined,
+          marginTop: rowIndex > 0 ? 8 : 0,
+          height: 200,
+        }}
+      >
+        {/* 0% / 50% / 100% grid 線：高度對齊 130px bar 區域 */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 30,   // ⬅ 原本是 10，改成 30 讓高度 = 130
+            right: 0,
+            bottom: 40,
+            left: 40,
+            pointerEvents: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            zIndex: 0,
+          }}
+        >
+          {[1, 0.5, 0].map((r) => (
+            <div
+              key={r}
+              style={{
+                borderTop: '1px solid #111827',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Y 軸線 + 文字（在左側，同樣 top: 30 才會對齊格線） */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 30,   // ⬅ 這裡也從 10 改成 30
+            left: 32,
+            bottom: 40,
+            width: 0,
+            borderLeft: '1px solid #111827',
+            zIndex: 1,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            top: 30,   // ⬅ 同步修改
+            left: 0,
+            bottom: 40,
+            width: 32,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            fontSize: 9,
+            color: '#6b7280',
+            textAlign: 'right',
+            paddingRight: 2,
+            zIndex: 1,
+          }}
+        >
+          <span>100%</span>
+          <span>50%</span>
+          <span>0%</span>
+        </div>
+
+        {/* bars */}
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: 16,
+            height: '100%',
+            paddingLeft: 40,
+          }}
+        >
+          {stores.map((store) => (
+            <div
+              key={`${store.region}-${store.store_name}`}
+              style={{
+                minWidth: 40,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+              }}
+            >
+              <div
+                style={{
+                  position: 'relative',
+                  height: 130,
+                  width: 18,
+                  borderRadius: 0,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column-reverse',
+                  backgroundColor: '#020617',
+                  border: '1px solid #111827',
+                }}
+              >
+                {store.shares
+                  .filter((s) => s.share > 0)
+                  .map((s) => {
+                    const baseColor =
+                      PLATFORM_BAR_HIGHLIGHT[
+                        s.platform as MatrixPlatformFilter
+                      ] ?? '#4b5563';
+
+                    const isActive =
+                      platformFilter === 'ALL' ||
+                      platformFilter === s.platform;
+
+                    const labelColor =
+                      s.platform === 'UBER' ? '#e5e7eb' : '#020617';
+
+                    return (
                       <div
-                        style={{
-                          display: 'flex',
-                          gap: 12,
-                          fontSize: 10,
-                          color: '#9ca3af',
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        {(['UBER', 'Fantuan', 'Doordash'] as const).map((p) => (
-                          <div
-                            key={p}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                          >
-                            <span
-                              style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: 9999,
-                                backgroundColor:
-                                  PLATFORM_BAR_HIGHLIGHT[
-                                    p as MatrixPlatformFilter
-                                  ],
-                                opacity:
-                                  platformFilter === 'ALL' ||
-                                  platformFilter === p
-                                    ? 1
-                                    : 0.35,
-                              }}
-                            />
-                            <span>{p}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {chunkedPlatformShare.map((stores, rowIndex) => (
-                      <div
-                        key={rowIndex}
+                        key={s.platform}
                         style={{
                           position: 'relative',
-                          padding: '10px 0 18px',
-                          overflowX: 'hidden',
-                          borderTop:
-                            rowIndex > 0 ? '1px dashed #111827' : undefined,
-                          marginTop: rowIndex > 0 ? 8 : 0,
-                          height: 200,
+                          height: `${Math.max(s.share * 100, 4)}%`,
+                          backgroundColor: baseColor,
+                          opacity: isActive ? 1 : 0.35,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                         }}
                       >
-                        {/* 0% / 50% / 100% grid 線 */}
-                        <div
-                          style={{
-                            position: 'absolute',
-                            top: 10,
-                            right: 0,
-                            bottom: 40,
-                            left: 40,
-                            pointerEvents: 'none',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            zIndex: 0,
-                          }}
-                        >
-                          {[1, 0.5, 0].map((r) => (
-                            <div
-                              key={r}
-                              style={{
-                                borderTop: '1px solid #111827',
-                              }}
-                            />
-                          ))}
-                        </div>
-
-                        {/* Y 軸線 + 文字（在左側） */}
-                        <div
-                          style={{
-                            position: 'absolute',
-                            top: 10,
-                            left: 32,
-                            bottom: 40,
-                            width: 0,
-                            borderLeft: '1px solid #111827',
-                            zIndex: 1,
-                          }}
-                        />
-                        <div
-                          style={{
-                            position: 'absolute',
-                            top: 10,
-                            left: 0,
-                            bottom: 40,
-                            width: 32,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            fontSize: 9,
-                            color: '#6b7280',
-                            textAlign: 'right',
-                            paddingRight: 2,
-                            zIndex: 1,
-                          }}
-                        >
-                          <span>100%</span>
-                          <span>50%</span>
-                          <span>0%</span>
-                        </div>
-
-                        {/* bars */}
-                        <div
-                          style={{
-                            position: 'relative',
-                            zIndex: 1,
-                            display: 'flex',
-                            alignItems: 'flex-end',
-                            gap: 16,
-                            height: '100%',
-                            paddingLeft: 40,
-                          }}
-                        >
-                          {stores.map((store) => (
-                            <div
-                              key={`${store.region}-${store.store_name}`}
-                              style={{
-                                minWidth: 40,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'flex-end',
-                              }}
-                            >
-                              <div
-                                style={{
-                                  position: 'relative',
-                                  height: 130,
-                                  width: 18,
-                                  borderRadius: 0,
-                                  overflow: 'hidden',
-                                  display: 'flex',
-                                  flexDirection: 'column-reverse',
-                                  backgroundColor: '#020617',
-                                  border: '1px solid #111827',
-                                }}
-                              >
-                                {store.shares
-                                  .filter((s) => s.share > 0)
-                                  .map((s) => {
-                                    const baseColor =
-                                      PLATFORM_BAR_HIGHLIGHT[
-                                        s.platform as MatrixPlatformFilter
-                                      ] ?? '#4b5563';
-
-                                    const isActive =
-                                      platformFilter === 'ALL' ||
-                                      platformFilter === s.platform;
-
-                                    const labelColor =
-                                      s.platform === 'UBER'
-                                        ? '#e5e7eb'
-                                        : '#020617';
-
-                                    return (
-                                      <div
-                                        key={s.platform}
-                                        style={{
-                                          position: 'relative',
-                                          height: `${Math.max(
-                                            s.share * 100,
-                                            4,
-                                          )}%`,
-                                          backgroundColor: baseColor,
-                                          opacity: isActive ? 1 : 0.35,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                        }}
-                                      >
-                                        {s.share >= 0.08 && (
-                                          <span
-                                            style={{
-                                              fontSize: 8,
-                                              color: labelColor,
-                                              textShadow:
-                                                '0 1px 2px rgba(0,0,0,0.4)',
-                                            }}
-                                          >
-                                            {(s.share * 100).toFixed(0)}%
-                                          </span>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                              </div>
-
-                              {/* 店名 */}
-                              <div
-                                style={{
-                                  marginTop: 8,
-                                  fontSize: 10,
-                                  color: '#9ca3af',
-                                  textAlign: 'center',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {store.store_name}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                        {s.share >= 0.08 && (
+                          <span
+                            style={{
+                              fontSize: 8,
+                              color: labelColor,
+                              textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                            }}
+                          >
+                            {(s.share * 100).toFixed(0)}%
+                          </span>
+                        )}
                       </div>
-                    ))}
-                  </>
-                )}
-              </>
-            )}
+                    );
+                  })}
+              </div>
+
+              {/* 店名 */}
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 10,
+                  color: '#9ca3af',
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {store.store_name}
+              </div>
+            </div>
+          ))}
         </div>
-      )}
-    </section>
-  );
-};
+      </div>
+    ))}
+  </>
+)}
+
 
 
 
