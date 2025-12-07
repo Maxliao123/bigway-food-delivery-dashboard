@@ -67,6 +67,11 @@ const STORES_PER_ROW = 10;
 // platform mix 堆疊圖：每列最多幾間店（→ 13）
 const STORES_PER_ROW_MIX = 13;
 
+// 3-month store revenue trend 的 Y 軸刻度（由上到下）
+const TREND_TICKS = [1, 0.75, 0.5, 0.25, 0];
+const TREND_PLOT_HEIGHT = 160; // 實際繪圖高度
+const TREND_Y_AXIS_WIDTH = 56; // Y 軸文字寬度
+
 type SortKey =
   | 'store_name'
   | 'revenueCurrent'
@@ -585,153 +590,161 @@ export const PlatformMatrix: React.FC<Props> = ({
                       marginTop: rowIndex > 0 ? 8 : 0,
                     }}
                   >
-                    {/* 橫向 grid 線：在 bar 背後（bottom 改為 60，讓 0 線跟柱子底部更齊） */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 10,
-                        right: 0,
-                        bottom: 60,
-                        left: 60,
-                        pointerEvents: 'none',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        zIndex: 0,
-                      }}
-                    >
-                      {[1, 0.75, 0.5, 0.25, 0].map((r) => (
-                        <div
-                          key={r}
-                          style={{
-                            borderTop: '1px solid #111827',
-                          }}
-                        />
-                      ))}
-                    </div>
-
+                    {/* 主要內容：Y 軸 + 繪圖區（同一個 PLOT_HEIGHT，確保 0 線和柱底對齊） */}
                     <div
                       style={{
                         display: 'flex',
                         alignItems: 'flex-end',
-                        gap: 12,
                         height: '100%',
                         paddingRight: 8,
-                        position: 'relative',
-                        zIndex: 1,
                       }}
                     >
-                      {/* Y 軸刻度（共用 maxTrendValue） */}
+                      {/* Y 軸刻度（跟 grid 共用 TREND_TICKS） */}
                       <div
                         style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          height: 160,
+                          position: 'relative',
+                          height: TREND_PLOT_HEIGHT,
                           marginRight: 8,
-                          fontSize: 9,
-                          color: '#6b7280',
-                          textAlign: 'right',
-                          minWidth: 52,
+                          minWidth: TREND_Y_AXIS_WIDTH,
                         }}
                       >
-                        {[1, 0.75, 0.5, 0.25, 0].map((r) => (
-                          <span key={r}>
+                        {TREND_TICKS.map((r) => (
+                          <div
+                            key={r}
+                            style={{
+                              position: 'absolute',
+                              right: 0,
+                              bottom: `${(1 - r) * 100}%`,
+                              transform: 'translateY(50%)',
+                              fontSize: 9,
+                              color: '#6b7280',
+                              textAlign: 'right',
+                              width: '100%',
+                            }}
+                          >
                             {formatCurrency(Math.round(maxTrendValue * r))}
-                          </span>
+                          </div>
                         ))}
                       </div>
 
-                      {/* bar groups：這一列的門店 */}
+                      {/* 繪圖區：grid + bars */}
                       <div
                         style={{
-                          display: 'flex',
-                          alignItems: 'flex-end',
-                          gap: 20,
-                          height: '100%',
+                          position: 'relative',
+                          height: TREND_PLOT_HEIGHT,
+                          flex: 1,
                         }}
                       >
-                        {rowSeries.map((series) => (
+                        {/* 橫向 grid 線（包含 $0 線） */}
+                        {TREND_TICKS.map((r) => (
                           <div
-                            key={`${series.region}-${series.store_name}`}
+                            key={r}
                             style={{
-                              minWidth: 56,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'flex-end',
+                              position: 'absolute',
+                              left: 0,
+                              right: 0,
+                              bottom: `${(1 - r) * 100}%`,
+                              borderTop: '1px solid #111827',
                             }}
-                          >
-                            {/* 三個月份的 bars */}
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'flex-end',
-                                gap: 6,
-                                height: 160,
-                              }}
-                            >
-                              {series.values.map((rawV, idx) => {
-                                const v = Number(rawV || 0);
-                                const ratio =
-                                  maxTrendValue > 0 ? v / maxTrendValue : 0;
-                                const height = Math.max(4, ratio * 140);
-                                const isLatest = idx === latestIndex;
-                                const rounded = Math.round(v);
-
-                                const barColor = isLatest
-                                  ? highlightColor
-                                  : NEUTRAL_BAR_COLORS[idx] ??
-                                    NEUTRAL_BAR_COLORS[
-                                      NEUTRAL_BAR_COLORS.length - 1
-                                    ];
-
-                                return (
-                                  <div
-                                    key={idx}
-                                    style={{
-                                      position: 'relative',
-                                      width: 10,
-                                      borderRadius: 0, // 長方形
-                                      backgroundColor: barColor,
-                                      height,
-                                    }}
-                                  >
-                                    {isLatest && (
-                                      <span
-                                        style={{
-                                          position: 'absolute',
-                                          bottom: height + 4,
-                                          left: '50%',
-                                          transform: 'translateX(-50%)',
-                                          fontSize: 9,
-                                          color: '#e5e7eb',
-                                          whiteSpace: 'nowrap',
-                                        }}
-                                      >
-                                        {rounded === 0
-                                          ? '0'
-                                          : rounded.toLocaleString()}
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {/* 店名：放在 0 線以下的空間 */}
-                            <div
-                              style={{
-                                marginTop: 8,
-                                fontSize: 10,
-                                color: '#9ca3af',
-                                textAlign: 'center',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {series.store_name}
-                            </div>
-                          </div>
+                          />
                         ))}
+
+                        {/* bar groups：這一列的門店 */}
+                        <div
+                          style={{
+                            position: 'relative',
+                            display: 'flex',
+                            alignItems: 'flex-end',
+                            gap: 20,
+                            height: '100%',
+                          }}
+                        >
+                          {rowSeries.map((series) => (
+                            <div
+                              key={`${series.region}-${series.store_name}`}
+                              style={{
+                                height: TREND_PLOT_HEIGHT + 24,
+                                minWidth: 56,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'flex-end',
+                              }}
+                            >
+                              {/* 三個月份的 bars：底部就是 $0 線 */}
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'flex-end',
+                                  gap: 6,
+                                  height: TREND_PLOT_HEIGHT,
+                                }}
+                              >
+                                {series.values.map((rawV, idx) => {
+                                  const v = Number(rawV || 0);
+                                  const ratio =
+                                    maxTrendValue > 0 ? v / maxTrendValue : 0;
+                                  const height = Math.max(
+                                    4,
+                                    ratio * (TREND_PLOT_HEIGHT - 20),
+                                  ); // 頂部留空間放數字
+                                  const isLatest = idx === latestIndex;
+                                  const rounded = Math.round(v);
+
+                                  const barColor = isLatest
+                                    ? highlightColor
+                                    : NEUTRAL_BAR_COLORS[idx] ??
+                                      NEUTRAL_BAR_COLORS[
+                                        NEUTRAL_BAR_COLORS.length - 1
+                                      ];
+
+                                  return (
+                                    <div
+                                      key={idx}
+                                      style={{
+                                        position: 'relative',
+                                        width: 10,
+                                        borderRadius: 0, // 長方形
+                                        backgroundColor: barColor,
+                                        height,
+                                      }}
+                                    >
+                                      {isLatest && (
+                                        <span
+                                          style={{
+                                            position: 'absolute',
+                                            bottom: height + 4,
+                                            left: '50%',
+                                            transform: 'translateX(-50%)',
+                                            fontSize: 9,
+                                            color: '#e5e7eb',
+                                            whiteSpace: 'nowrap',
+                                          }}
+                                        >
+                                          {rounded === 0
+                                            ? '0'
+                                            : rounded.toLocaleString()}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {/* 店名：在 $0 線以下 */}
+                              <div
+                                style={{
+                                  marginTop: 8,
+                                  fontSize: 10,
+                                  color: '#9ca3af',
+                                  textAlign: 'center',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {series.store_name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -860,7 +873,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                             fontSize: 9,
                             color: '#6b7280',
                             textAlign: 'right',
-                            paddingRight: 18, // 文字靠在軸線左邊
+                            paddingRight: 18,
                             zIndex: 1,
                           }}
                         >
@@ -941,7 +954,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                                         {s.share >= 0.08 && (
                                           <span
                                             style={{
-                                              fontSize: 8, // 數字再小一點
+                                              fontSize: 8,
                                               color: labelColor,
                                               textShadow:
                                                 '0 1px 2px rgba(0,0,0,0.4)',
@@ -1021,8 +1034,6 @@ export const PlatformMatrix: React.FC<Props> = ({
     </section>
   );
 };
-
-
 
 
 
