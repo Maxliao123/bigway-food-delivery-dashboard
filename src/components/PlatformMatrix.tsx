@@ -53,6 +53,9 @@ function momCellStyle(mom: number | null): React.CSSProperties {
 // 顏色改成同一色系：最舊淡、中間、中等、最新亮
 const MONTH_COLORS = ['#4b5563', '#64748b', '#4f8cff'];
 
+// 每列最多顯示幾間店（超過就自動換到下一列）
+const STORES_PER_ROW = 10;
+
 type SortKey =
   | 'store_name'
   | 'revenueCurrent'
@@ -205,6 +208,16 @@ export const PlatformMatrix: React.FC<Props> = ({
       (a, b) => (b.values[lastIdx] || 0) - (a.values[lastIdx] || 0),
     );
   }, [trendMonths, trendSeries]);
+
+  // 依照每列最多幾間店，把門店分成多個 row
+  const chunkedTrendSeries = useMemo(() => {
+    if (!sortedTrendSeries.length) return [] as (typeof sortedTrendSeries)[];
+    const chunks: (typeof sortedTrendSeries)[] = [];
+    for (let i = 0; i < sortedTrendSeries.length; i += STORES_PER_ROW) {
+      chunks.push(sortedTrendSeries.slice(i, i + STORES_PER_ROW));
+    }
+    return chunks;
+  }, [sortedTrendSeries]);
 
   const latestIndex =
     trendMonths.length > 0 ? trendMonths.length - 1 : -1;
@@ -493,7 +506,7 @@ export const PlatformMatrix: React.FC<Props> = ({
             </tbody>
           </table>
 
-          {/* 近三個月門店長條圖 */}
+          {/* 近三個月門店長條圖（多列 + Y 軸） */}
           {trendMonths.length > 0 &&
             sortedTrendSeries.length > 0 &&
             maxTrendValue > 0 && (
@@ -523,99 +536,136 @@ export const PlatformMatrix: React.FC<Props> = ({
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    position: 'relative',
-                    height: 190,
-                    padding: '10px 0 12px',
-                    overflowX: 'auto',
-                  }}
-                >
+                {chunkedTrendSeries.map((rowSeries, rowIndex) => (
                   <div
+                    key={rowIndex}
                     style={{
-                      display: 'flex',
-                      alignItems: 'flex-end',
-                      gap: 14,
-                      height: '100%',
-                      paddingRight: 8,
+                      position: 'relative',
+                      height: 200,
+                      padding: '10px 0 12px',
+                      overflowX: 'auto',
+                      borderTop:
+                        rowIndex > 0 ? '1px dashed #111827' : undefined,
+                      marginTop: rowIndex > 0 ? 8 : 0,
                     }}
                   >
-                    {sortedTrendSeries.map((series) => (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-end',
+                        gap: 12,
+                        height: '100%',
+                        paddingRight: 8,
+                      }}
+                    >
+                      {/* Y 軸刻度（共用 maxTrendValue） */}
                       <div
-                        key={`${series.region}-${series.store_name}`}
                         style={{
-                          minWidth: 56,
                           display: 'flex',
                           flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'flex-end',
+                          justifyContent: 'space-between',
+                          height: 140,
+                          marginRight: 8,
+                          fontSize: 9,
+                          color: '#6b7280',
+                          textAlign: 'right',
+                          minWidth: 52,
                         }}
                       >
-                        {/* bars */}
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'flex-end',
-                            gap: 4,
-                            height: 140,
-                          }}
-                        >
-                          {series.values.map((rawV, idx) => {
-                            const v = Number(rawV || 0);
-                            const ratio =
-                              maxTrendValue > 0 ? v / maxTrendValue : 0;
-                            const height = Math.max(4, ratio * 120); // 120px 留空間放標籤
-                            const isLatest = idx === latestIndex;
-                            const rounded = Math.round(v);
+                        {[1, 0.75, 0.5, 0.25, 0].map((r) => (
+                          <span key={r}>
+                            {formatCurrency(Math.round(maxTrendValue * r))}
+                          </span>
+                        ))}
+                      </div>
 
-                            return (
-                              <div
-                                key={idx}
-                                style={{
-                                  position: 'relative',
-                                  width: 10,
-                                  borderRadius: 9999,
-                                  backgroundColor:
-                                    MONTH_COLORS[idx % MONTH_COLORS.length],
-                                  height,
-                                }}
-                              >
-                                {isLatest && (
-                                  <span
+                      {/* bar groups：這一列的門店 */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-end',
+                          gap: 20, // 店與店之間間距大一點
+                          height: '100%',
+                        }}
+                      >
+                        {rowSeries.map((series) => (
+                          <div
+                            key={`${series.region}-${series.store_name}`}
+                            style={{
+                              minWidth: 56,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'flex-end',
+                            }}
+                          >
+                            {/* 三個月份的 bars */}
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-end',
+                                gap: 6, // 月份之間間距
+                                height: 140,
+                              }}
+                            >
+                              {series.values.map((rawV, idx) => {
+                                const v = Number(rawV || 0);
+                                const ratio =
+                                  maxTrendValue > 0 ? v / maxTrendValue : 0;
+                                const height = Math.max(4, ratio * 120); // 120px 留空間放標籤
+                                const isLatest = idx === latestIndex;
+                                const rounded = Math.round(v);
+
+                                return (
+                                  <div
+                                    key={idx}
                                     style={{
-                                      position: 'absolute',
-                                      bottom: height + 4,
-                                      left: '50%',
-                                      transform: 'translateX(-50%)',
-                                      fontSize: 9,
-                                      color: '#e5e7eb',
-                                      whiteSpace: 'nowrap',
+                                      position: 'relative',
+                                      width: 10,
+                                      borderRadius: 9999,
+                                      backgroundColor:
+                                        MONTH_COLORS[idx % MONTH_COLORS.length],
+                                      height,
                                     }}
                                   >
-                                    {rounded === 0
-                                      ? '0'
-                                      : rounded.toLocaleString()}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div
-                          style={{
-                            marginTop: 4,
-                            fontSize: 10,
-                            color: '#9ca3af',
-                            textAlign: 'center',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {series.store_name}
-                        </div>
+                                    {isLatest && (
+                                      <span
+                                        style={{
+                                          position: 'absolute',
+                                          bottom: height + 4,
+                                          left: '50%',
+                                          transform: 'translateX(-50%)',
+                                          fontSize: 9,
+                                          color: '#e5e7eb',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        {rounded === 0
+                                          ? '0'
+                                          : rounded.toLocaleString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div
+                              style={{
+                                marginTop: 4,
+                                fontSize: 10,
+                                color: '#9ca3af',
+                                textAlign: 'center',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {series.store_name}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
+                ))}
 
                 {/* 月份 legend */}
                 <div
@@ -653,5 +703,6 @@ export const PlatformMatrix: React.FC<Props> = ({
     </section>
   );
 };
+
 
 
