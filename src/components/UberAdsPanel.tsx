@@ -661,7 +661,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                             textAlign: 'right',
                           }}
                         >
-                          {formatCurrency(sales)}
+                          {formatCurrency2(sales)}
                         </td>
 
                         {/* AD Spend */}
@@ -671,7 +671,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                             textAlign: 'right',
                           }}
                         >
-                          {formatCurrency(row.curr.spend)}
+                          {formatCurrency2(row.curr.spend)}
                         </td>
 
                         {/* Daily AD Spend */}
@@ -681,7 +681,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                             textAlign: 'right',
                           }}
                         >
-                          {formatCurrency(row.curr.daily_spend)}
+                          {formatCurrency2(row.curr.daily_spend)}
                         </td>
 
                         {/* ROAS */}
