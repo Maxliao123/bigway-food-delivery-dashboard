@@ -207,4 +207,3 @@ const monthLabel = (iso: string) => {
 }
 
 export default App;
-
