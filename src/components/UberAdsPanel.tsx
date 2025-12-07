@@ -325,7 +325,7 @@ export const UberAdsPanel: React.FC<Props> = ({
 
       {/* KPI cards */}
       {!loading && !error && (
-        <div className="kpi-grid" style={{ marginBottom: 16 }}>
+        <div className="kpi-grid" style={{ marginBottom: 28 }}>
           {/* Total AD Sales */}
           <div className="kpi-card">
             <div className="kpi-title">
@@ -406,7 +406,7 @@ export const UberAdsPanel: React.FC<Props> = ({
           ) : (
             <div
               style={{
-                marginTop: 8,
+                marginTop: 16,
                 overflowX: 'auto',
               }}
             >
@@ -451,7 +451,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                       </button>
                     </th>
 
-                    {/* Sales */}
+                    {/* AD Sales */}
                     <th
                       style={{
                         textAlign: 'right',
@@ -472,12 +472,12 @@ export const UberAdsPanel: React.FC<Props> = ({
                           alignItems: 'center',
                         }}
                       >
-                        {isZh ? 'Sales' : 'Sales'}
+                        {isZh ? 'AD Sales' : 'AD Sales'}
                         {renderSortIcon('sales')}
                       </button>
                     </th>
 
-                    {/* Spend */}
+                    {/* AD Spend */}
                     <th
                       style={{
                         textAlign: 'right',
@@ -498,12 +498,12 @@ export const UberAdsPanel: React.FC<Props> = ({
                           alignItems: 'center',
                         }}
                       >
-                        Spend
+                        AD Spend
                         {renderSortIcon('spend')}
                       </button>
                     </th>
 
-                    {/* Daily spend */}
+                    {/* Daily AD Spend */}
                     <th
                       style={{
                         textAlign: 'right',
@@ -524,7 +524,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                           alignItems: 'center',
                         }}
                       >
-                        {isZh ? '日均花費' : 'Daily spend'}
+                        {isZh ? '日均 AD Spend' : 'Daily AD Spend'}
                         {renderSortIcon('dailySpend')}
                       </button>
                     </th>
@@ -630,7 +630,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                           {row.store_name}
                         </td>
 
-                        {/* Sales */}
+                        {/* AD Sales */}
                         <td
                           style={{
                             padding: '6px 4px',
@@ -640,7 +640,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                           {formatCurrency(sales)}
                         </td>
 
-                        {/* Spend */}
+                        {/* AD Spend */}
                         <td
                           style={{
                             padding: '6px 4px',
@@ -650,7 +650,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                           {formatCurrency(row.curr.spend)}
                         </td>
 
-                        {/* Daily spend */}
+                        {/* Daily AD Spend */}
                         <td
                           style={{
                             padding: '6px 4px',
