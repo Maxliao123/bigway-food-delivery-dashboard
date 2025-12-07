@@ -167,9 +167,6 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
   };
   const FALLBACK_COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
 
-  const fontScale = 0.3;
-  const labelFontSize = 12 * fontScale;
-  const axisFontSize = 12 * fontScale;
   // 數值標籤字級與上方 Platform breakdown 表格一致
   const labelFontSize = 12;
 
@@ -236,7 +233,6 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
             x={getX(idx)}
             y={margin.top + chartHeight + 18}
             textAnchor="middle"
-            fontSize={axisFontSize}
             fontSize={12}
             fill="rgba(255,255,255,0.55)"
           >
@@ -964,4 +960,5 @@ export const ExecutiveSummary: React.FC<Props> = ({
     </div>
   );
 };
+
 
