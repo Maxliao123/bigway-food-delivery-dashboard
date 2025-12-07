@@ -273,7 +273,7 @@ export const PlatformMatrix: React.FC<Props> = ({
       >
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
-            {isZh ? '多平台動能矩陣' : 'Platform Velocity Matrix'}
+            {isZh ? '門店拆分' : 'Store Breakdown'}
           </h2>
           <p style={{ fontSize: 13, color: '#9ca3af' }}>
             {isZh
