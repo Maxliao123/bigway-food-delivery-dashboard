@@ -67,9 +67,6 @@ const STORES_PER_ROW = 10;
 // platform mix 堆疊圖：每列最多幾間店
 const STORES_PER_ROW_MIX = 13;
 
-// 3-month store revenue trend 的 Y 軸刻度（拿掉 0）
-const REVENUE_AXIS_TICKS = [1, 0.75, 0.5, 0.25];
-
 type SortKey =
   | 'store_name'
   | 'revenueCurrent'
@@ -545,7 +542,7 @@ export const PlatformMatrix: React.FC<Props> = ({
             </tbody>
           </table>
 
-          {/* 近三個月門店長條圖（多列 + Y 軸 + 橫向 grid） */}
+          {/* 近三個月門店長條圖（多列、無 y 軸線，0 值不畫 bar） */}
           {trendMonths.length > 0 &&
             sortedTrendSeries.length > 0 &&
             maxTrendValue > 0 && (
@@ -580,7 +577,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                     key={rowIndex}
                     style={{
                       position: 'relative',
-                      height: 230,
+                      height: 210,
                       padding: '10px 0 12px',
                       overflowX: 'auto',
                       borderTop:
@@ -588,31 +585,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                       marginTop: rowIndex > 0 ? 8 : 0,
                     }}
                   >
-                    {/* 橫向 grid 線：在 bar 背後（不畫 0 線） */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 10,
-                        right: 0,
-                        bottom: 60,
-                        left: 60,
-                        pointerEvents: 'none',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        zIndex: 0,
-                      }}
-                    >
-                      {REVENUE_AXIS_TICKS.map((r) => (
-                        <div
-                          key={r}
-                          style={{
-                            borderTop: '1px solid #111827',
-                          }}
-                        />
-                      ))}
-                    </div>
-
+                    {/* 只保留 bars + 店名，不畫任何 y 軸線與 label */}
                     <div
                       style={{
                         display: 'flex',
@@ -620,31 +593,8 @@ export const PlatformMatrix: React.FC<Props> = ({
                         gap: 12,
                         height: '100%',
                         paddingRight: 8,
-                        position: 'relative',
-                        zIndex: 1,
                       }}
                     >
-                      {/* Y 軸刻度（共用 maxTrendValue，不含 0） */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          height: 160,
-                          marginRight: 8,
-                          fontSize: 9,
-                          color: '#6b7280',
-                          textAlign: 'right',
-                          minWidth: 52,
-                        }}
-                      >
-                        {REVENUE_AXIS_TICKS.map((r) => (
-                          <span key={r}>
-                            {formatCurrency(Math.round(maxTrendValue * r))}
-                          </span>
-                        ))}
-                      </div>
-
                       {/* bar groups：這一列的門店 */}
                       <div
                         style={{
@@ -676,9 +626,20 @@ export const PlatformMatrix: React.FC<Props> = ({
                             >
                               {series.values.map((rawV, idx) => {
                                 const v = Number(rawV || 0);
+
+                                // 如果該月完全沒有數值，就不畫灰色小 bar，直接空白
+                                if (!v || v <= 0) {
+                                  return (
+                                    <div
+                                      key={idx}
+                                      style={{ width: 10, height: 0 }}
+                                    />
+                                  );
+                                }
+
                                 const ratio =
                                   maxTrendValue > 0 ? v / maxTrendValue : 0;
-                                const height = Math.max(4, ratio * 140);
+                                const height = ratio * 150; // 不再有 4px 最小高度
                                 const isLatest = idx === latestIndex;
                                 const rounded = Math.round(v);
 
@@ -704,7 +665,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                                       <span
                                         style={{
                                           position: 'absolute',
-                                          bottom: height + 4,
+                                          bottom: height + 10,
                                           left: '50%',
                                           transform: 'translateX(-50%)',
                                           fontSize: 9,
@@ -721,7 +682,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                                 );
                               })}
                             </div>
-                            {/* 店名：放在圖表底部空間 */}
+                            {/* 店名固定在 bars 下方 */}
                             <div
                               style={{
                                 marginTop: 8,
@@ -769,7 +730,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                   ))}
                 </div>
 
-                {/* 當月各平台營收佔比（堆疊柱狀圖） */}
+                {/* === Current-month platform mix by store（下方堆疊圖） === */}
                 {chunkedPlatformShare.length > 0 && (
                   <>
                     <div
@@ -811,7 +772,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                           height: 200,
                         }}
                       >
-                        {/* 0% / 50% / 100% grid（背景線） */}
+                        {/* 0% / 50% / 100% grid 線（仍保留） */}
                         <div
                           style={{
                             position: 'absolute',
@@ -836,34 +797,32 @@ export const PlatformMatrix: React.FC<Props> = ({
                           ))}
                         </div>
 
-                        {/* 垂直 y 軸線（左側） */}
+                        {/* Y 軸線 + 文字（移到左側） */}
                         <div
                           style={{
                             position: 'absolute',
                             top: 10,
-                            left: 40,
+                            left: 32,
                             bottom: 40,
                             width: 0,
                             borderLeft: '1px solid #111827',
                             zIndex: 1,
                           }}
                         />
-
-                        {/* Y 軸刻度文字：全部移到左側，貼在軸線左邊 */}
                         <div
                           style={{
                             position: 'absolute',
                             top: 10,
                             left: 0,
                             bottom: 40,
-                            width: 40,
+                            width: 32,
                             display: 'flex',
                             flexDirection: 'column',
                             justifyContent: 'space-between',
                             fontSize: 9,
                             color: '#6b7280',
                             textAlign: 'right',
-                            paddingRight: 4,
+                            paddingRight: 2,
                             zIndex: 1,
                           }}
                         >
@@ -900,7 +859,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                                   position: 'relative',
                                   height: 130,
                                   width: 18,
-                                  borderRadius: 0, // 長方形
+                                  borderRadius: 0,
                                   overflow: 'hidden',
                                   display: 'flex',
                                   flexDirection: 'column-reverse',
@@ -944,7 +903,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                                         {s.share >= 0.08 && (
                                           <span
                                             style={{
-                                              fontSize: 8, // 數字再小一點
+                                              fontSize: 8,
                                               color: labelColor,
                                               textShadow:
                                                 '0 1px 2px rgba(0,0,0,0.4)',
@@ -1024,7 +983,6 @@ export const PlatformMatrix: React.FC<Props> = ({
     </section>
   );
 };
-
 
 
 
