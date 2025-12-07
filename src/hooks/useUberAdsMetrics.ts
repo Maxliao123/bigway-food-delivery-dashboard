@@ -64,7 +64,7 @@ export function useUberAdsMetrics(
       );
 
       const { data, error } = await supabase
-        .from<RawUberAdsMetric>('uber_ads_metrics')
+        .from('uber_ads_metrics')
         .select(
           'region, store_name, month_date, spend, roas, orders, avg_cost_per_order',
         )
@@ -93,12 +93,14 @@ export function useUberAdsMetrics(
         return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
       })();
 
+      const rowsData = (data ?? []) as RawUberAdsMetric[];
+
       const byStore = new Map<
         string,
         { region: string; curr?: RawUberAdsMetric; prev?: RawUberAdsMetric }
       >();
 
-      for (const row of data ?? []) {
+      for (const row of rowsData) {
         const key = row.store_name;
         const bucket =
           byStore.get(key) ?? { region: row.region, curr: undefined, prev: undefined };
