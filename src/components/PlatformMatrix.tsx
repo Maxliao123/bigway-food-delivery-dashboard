@@ -50,8 +50,16 @@ function momCellStyle(mom: number | null): React.CSSProperties {
   return { color: '#9ca3af' };
 }
 
-// 顏色改成同一色系：最舊淡、中間、中等、最新亮
-const MONTH_COLORS = ['#4b5563', '#64748b', '#4f8cff'];
+// 灰階：前兩個月份用
+const NEUTRAL_BAR_COLORS = ['#4b5563', '#6b7280'];
+
+// 各平台「最新月份」高亮色，和 3-month platform performance trend 配色一致
+const PLATFORM_BAR_HIGHLIGHT: Record<MatrixPlatformFilter, string> = {
+  ALL: '#f97316', // 橘
+  UBER: '#3b82f6', // 藍
+  Fantuan: '#22c55e', // 綠
+  Doordash: '#eab308', // 黃
+};
 
 // 每列最多顯示幾間店（超過就自動換到下一列）
 const STORES_PER_ROW = 10;
@@ -211,8 +219,8 @@ export const PlatformMatrix: React.FC<Props> = ({
 
   // 依照每列最多幾間店，把門店分成多個 row
   const chunkedTrendSeries = useMemo(() => {
-    if (!sortedTrendSeries.length) return [] as (typeof sortedTrendSeries)[];
-    const chunks: (typeof sortedTrendSeries)[] = [];
+    if (!sortedTrendSeries.length) return [] as typeof sortedTrendSeries[];
+    const chunks: typeof sortedTrendSeries[] = [];
     for (let i = 0; i < sortedTrendSeries.length; i += STORES_PER_ROW) {
       chunks.push(sortedTrendSeries.slice(i, i + STORES_PER_ROW));
     }
@@ -221,6 +229,19 @@ export const PlatformMatrix: React.FC<Props> = ({
 
   const latestIndex =
     trendMonths.length > 0 ? trendMonths.length - 1 : -1;
+
+  const highlightColor = PLATFORM_BAR_HIGHLIGHT[platformFilter];
+
+  const legendColors = useMemo(
+    () =>
+      trendMonths.map((_, idx) =>
+        idx === latestIndex
+          ? highlightColor
+          : NEUTRAL_BAR_COLORS[idx] ??
+            NEUTRAL_BAR_COLORS[NEUTRAL_BAR_COLORS.length - 1],
+      ),
+    [trendMonths, latestIndex, highlightColor],
+  );
 
   return (
     <section>
@@ -506,7 +527,7 @@ export const PlatformMatrix: React.FC<Props> = ({
             </tbody>
           </table>
 
-          {/* 近三個月門店長條圖（多列 + Y 軸） */}
+          {/* 近三個月門店長條圖（多列 + Y 軸 + 橫向 grid） */}
           {trendMonths.length > 0 &&
             sortedTrendSeries.length > 0 &&
             maxTrendValue > 0 && (
@@ -549,6 +570,31 @@ export const PlatformMatrix: React.FC<Props> = ({
                       marginTop: rowIndex > 0 ? 8 : 0,
                     }}
                   >
+                    {/* 橫向 grid 線：在 bar 背後 */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 10,
+                        right: 0,
+                        bottom: 12,
+                        left: 60, // 略大於 Y 軸寬度 (52 + 8)
+                        pointerEvents: 'none',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        zIndex: 0,
+                      }}
+                    >
+                      {[1, 0.75, 0.5, 0.25, 0].map((r) => (
+                        <div
+                          key={r}
+                          style={{
+                            borderTop: '1px solid #111827',
+                          }}
+                        />
+                      ))}
+                    </div>
+
                     <div
                       style={{
                         display: 'flex',
@@ -556,6 +602,8 @@ export const PlatformMatrix: React.FC<Props> = ({
                         gap: 12,
                         height: '100%',
                         paddingRight: 8,
+                        position: 'relative',
+                        zIndex: 1,
                       }}
                     >
                       {/* Y 軸刻度（共用 maxTrendValue） */}
@@ -616,6 +664,13 @@ export const PlatformMatrix: React.FC<Props> = ({
                                 const isLatest = idx === latestIndex;
                                 const rounded = Math.round(v);
 
+                                const barColor = isLatest
+                                  ? highlightColor
+                                  : NEUTRAL_BAR_COLORS[idx] ??
+                                    NEUTRAL_BAR_COLORS[
+                                      NEUTRAL_BAR_COLORS.length - 1
+                                    ];
+
                                 return (
                                   <div
                                     key={idx}
@@ -623,8 +678,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                                       position: 'relative',
                                       width: 10,
                                       borderRadius: 9999,
-                                      backgroundColor:
-                                        MONTH_COLORS[idx % MONTH_COLORS.length],
+                                      backgroundColor: barColor,
                                       height,
                                     }}
                                   >
@@ -688,8 +742,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                           width: 8,
                           height: 8,
                           borderRadius: 9999,
-                          backgroundColor:
-                            MONTH_COLORS[idx % MONTH_COLORS.length],
+                          backgroundColor: legendColors[idx],
                         }}
                       />
                       <span>{monthLabel(m, language)}</span>
@@ -703,6 +756,7 @@ export const PlatformMatrix: React.FC<Props> = ({
     </section>
   );
 };
+
 
 
 
