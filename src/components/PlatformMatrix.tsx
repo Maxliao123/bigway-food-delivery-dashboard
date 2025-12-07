@@ -272,15 +272,19 @@ export const PlatformMatrix: React.FC<Props> = ({
         }}
       >
         <div>
-          <h2  style={{
-    fontSize: 14,
-    fontWeight: 600,
-    letterSpacing: '0.05em',
+         <h2
+  style={{
+    fontSize: 13,
+    fontWeight: 500,
+    letterSpacing: '0.08em',
     textTransform: 'uppercase',
-    marginBottom: 6,
-    color: '#e5e7eb', }}>
-            {isZh ? '門店拆分' : 'Store Breakdown'}
-          </h2>
+    color: '#9ca3af',
+    marginBottom: 4,
+  }}
+>
+  {isZh ? '門店拆分' : 'Store Breakdown'}
+</h2>
+
           <p style={{ fontSize: 13, color: '#9ca3af' }}>
             {isZh
               ? '各平台門店營收、單量與客單價的 MoM 表現，點擊欄位可排序。'
