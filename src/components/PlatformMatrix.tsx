@@ -1,10 +1,34 @@
 // src/components/PlatformMatrix.tsx
 import React, { useMemo, useState } from 'react';
-import { usePlatformMatrix } from '../hooks/usePlatformMatrix';
+import {
+  usePlatformMatrix,
+  type MatrixPlatformFilter,
+} from '../hooks/usePlatformMatrix';
 import type { Lang } from '../App';
 
 function formatCurrency(value: number): string {
-  return '$' + value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (!Number.isFinite(value) || value === 0) return '$0';
+  return (
+    '$' +
+    value.toLocaleString(undefined, {
+      maximumFractionDigits: 0,
+    })
+  );
+}
+
+function formatNumber(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function formatAov(value: number): string {
+  if (!Number.isFinite(value)) return '—';
+  return (
+    '$' +
+    value.toLocaleString(undefined, {
+      maximumFractionDigits: 1,
+    })
+  );
 }
 
 function formatPercent(value: number | null): string {
@@ -26,15 +50,18 @@ function momCellStyle(mom: number | null): React.CSSProperties {
   return { color: '#9ca3af' };
 }
 
+// 顏色改成同一色系：最舊淡、中間、中等、最新亮
+const MONTH_COLORS = ['#4b5563', '#64748b', '#4f8cff'];
+
 type SortKey =
-  | 'region'
   | 'store_name'
-  | 'uberCurrent'
-  | 'uberPrev'
-  | 'uberMom'
-  | 'fantuanCurrent'
-  | 'fantuanPrev'
-  | 'fantuanMom';
+  | 'revenueCurrent'
+  | 'revenuePrev'
+  | 'revenueMom'
+  | 'ordersCurrent'
+  | 'ordersMom'
+  | 'aovCurrent'
+  | 'aovMom';
 
 type SortState = {
   key: SortKey;
@@ -43,19 +70,73 @@ type SortState = {
 
 type Props = {
   language: Lang;
+  selectedRegion: string;
+  selectedMonth: string;
 };
 
-export const PlatformMatrix: React.FC<Props> = ({ language }) => {
-  const { loading, error, currentMonth, prevMonth, rows } = usePlatformMatrix();
+const PLATFORM_OPTIONS: {
+  value: MatrixPlatformFilter;
+  labelEn: string;
+  labelZh: string;
+}[] = [
+  { value: 'ALL', labelEn: 'All', labelZh: '全平台' },
+  { value: 'UBER', labelEn: 'Uber', labelZh: 'Uber' },
+  { value: 'Fantuan', labelEn: 'Fantuan', labelZh: 'Fantuan' },
+  { value: 'Doordash', labelEn: 'Doordash', labelZh: 'Doordash' },
+];
+
+const platformLabel = (value: MatrixPlatformFilter, isZh: boolean) => {
+  switch (value) {
+    case 'ALL':
+      return isZh ? '全平台總和' : 'All platforms';
+    case 'UBER':
+      return 'UBER';
+    case 'Fantuan':
+      return 'Fantuan';
+    case 'Doordash':
+      return 'Doordash';
+    default:
+      return value;
+  }
+};
+
+const monthLabel = (iso: string, lang: Lang) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 7);
+  const opts: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    year: 'numeric',
+  };
+  return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', opts);
+};
+
+export const PlatformMatrix: React.FC<Props> = ({
+  language,
+  selectedRegion,
+  selectedMonth,
+}) => {
+  const [platformFilter, setPlatformFilter] =
+    useState<MatrixPlatformFilter>('ALL');
+
+  const {
+    loading,
+    error,
+    currentMonth,
+    prevMonth,
+    rows,
+    trendMonths,
+    trendSeries,
+  } = usePlatformMatrix(selectedRegion, selectedMonth, platformFilter);
+
   const [sort, setSort] = useState<SortState>({
-    key: 'region',
-    direction: 'asc',
+    key: 'revenueCurrent',
+    direction: 'desc',
   });
 
   const isZh = language === 'zh';
 
   const handleSort = (key: SortKey) => {
-    setSort(prev => {
+    setSort((prev) => {
       if (prev.key === key) {
         return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       }
@@ -70,22 +151,22 @@ export const PlatformMatrix: React.FC<Props> = ({ language }) => {
 
       const getValue = (row: (typeof rows)[number]): any => {
         switch (sort.key) {
-          case 'region':
-            return row.region;
           case 'store_name':
             return row.store_name;
-          case 'uberCurrent':
-            return row.uberCurrent;
-          case 'uberPrev':
-            return row.uberPrev ?? -Infinity;
-          case 'uberMom':
-            return row.uberMom ?? -Infinity;
-          case 'fantuanCurrent':
-            return row.fantuanCurrent;
-          case 'fantuanPrev':
-            return row.fantuanPrev ?? -Infinity;
-          case 'fantuanMom':
-            return row.fantuanMom ?? -Infinity;
+          case 'revenueCurrent':
+            return row.revenueCurrent;
+          case 'revenuePrev':
+            return row.revenuePrev ?? -Infinity;
+          case 'revenueMom':
+            return row.revenueMom ?? -Infinity;
+          case 'ordersCurrent':
+            return row.ordersCurrent;
+          case 'ordersMom':
+            return row.ordersMom ?? -Infinity;
+          case 'aovCurrent':
+            return row.aovCurrent;
+          case 'aovMom':
+            return row.aovMom ?? -Infinity;
         }
       };
 
@@ -106,16 +187,98 @@ export const PlatformMatrix: React.FC<Props> = ({ language }) => {
     return sort.direction === 'asc' ? ' ↑' : ' ↓';
   };
 
+  // bar chart 用：找出最大值 & 依最新月份排序門店
+  const maxTrendValue = useMemo(() => {
+    let max = 0;
+    for (const s of trendSeries) {
+      for (const v of s.values) {
+        if (v > max) max = v;
+      }
+    }
+    return max;
+  }, [trendSeries]);
+
+  const sortedTrendSeries = useMemo(() => {
+    if (!trendMonths.length || !trendSeries.length) return [];
+    const lastIdx = trendMonths.length - 1;
+    return [...trendSeries].sort(
+      (a, b) => (b.values[lastIdx] || 0) - (a.values[lastIdx] || 0),
+    );
+  }, [trendMonths, trendSeries]);
+
+  const latestIndex =
+    trendMonths.length > 0 ? trendMonths.length - 1 : -1;
+
   return (
     <section>
-      <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
-        {isZh ? '多平台動能矩陣' : 'Platform Velocity Matrix'}
-      </h2>
-      <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 12 }}>
-        {isZh
-          ? 'Uber / Fantuan 各門店營收與 MoM 表現，點擊欄位可排序。'
-          : 'Uber vs Fantuan revenue and MoM by store. Click headers to sort.'}
-      </p>
+      {/* 標題列 + 平台篩選器 */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+          gap: 12,
+          marginBottom: 10,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
+            {isZh ? '多平台動能矩陣' : 'Platform Velocity Matrix'}
+          </h2>
+          <p style={{ fontSize: 13, color: '#9ca3af' }}>
+            {isZh
+              ? '各平台門店營收、單量與客單價的 MoM 表現，點擊欄位可排序。'
+              : 'Store-level performance by platform (revenue, orders, AOV). Click headers to sort.'}
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ fontSize: 11, color: '#9ca3af' }}>
+            {isZh ? '平台：' : 'Platform:'}
+          </span>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: 2,
+              borderRadius: 9999,
+              border: '1px solid #374151',
+              background: '#020617',
+            }}
+          >
+            {PLATFORM_OPTIONS.map((opt) => {
+              const active = platformFilter === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setPlatformFilter(opt.value)}
+                  style={{
+                    border: 'none',
+                    borderRadius: 9999,
+                    padding: '2px 8px',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    background: active ? '#1f2937' : 'transparent',
+                    color: active ? '#f9fafb' : '#9ca3af',
+                    transition: 'background 0.15s ease, color 0.15s ease',
+                  }}
+                >
+                  {isZh ? opt.labelZh : opt.labelEn}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
       {loading && (
         <div style={{ fontSize: 13 }}>
@@ -139,6 +302,7 @@ export const PlatformMatrix: React.FC<Props> = ({ language }) => {
             overflowX: 'auto',
           }}
         >
+          {/* 區域＋月份 */}
           <div
             style={{
               fontSize: 11,
@@ -146,12 +310,15 @@ export const PlatformMatrix: React.FC<Props> = ({ language }) => {
               marginBottom: 8,
               display: 'flex',
               justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
             }}
           >
             <span>
               {isZh
-                ? 'BC / ON / CA — 門店層級'
-                : 'BC / ON / CA — Store Level'}
+                ? `${selectedRegion} — 門店層級`
+                : `${selectedRegion} — Store Level`}
             </span>
             <span>
               {isZh ? '當月：' : 'Current: '}
@@ -164,6 +331,7 @@ export const PlatformMatrix: React.FC<Props> = ({ language }) => {
             </span>
           </div>
 
+          {/* 表格 */}
           <table
             style={{
               width: '100%',
@@ -176,110 +344,314 @@ export const PlatformMatrix: React.FC<Props> = ({ language }) => {
               <tr style={{ borderBottom: '1px solid #374151', color: '#9ca3af' }}>
                 <th
                   style={{ textAlign: 'left', padding: '6px 4px', cursor: 'pointer' }}
-                  onClick={() => handleSort('region')}
-                >
-                  {isZh ? '區域' : 'Region'}
-                  {renderSortArrow('region')}
-                </th>
-                <th
-                  style={{ textAlign: 'left', padding: '6px 4px', cursor: 'pointer' }}
                   onClick={() => handleSort('store_name')}
                 >
                   {isZh ? '門店' : 'Store'}
                   {renderSortArrow('store_name')}
                 </th>
+
+                {/* 營收 */}
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
-                  onClick={() => handleSort('uberCurrent')}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => handleSort('revenueCurrent')}
                 >
-                  {isZh ? 'Uber 當月' : 'Uber Current'}
-                  {renderSortArrow('uberCurrent')}
+                  {isZh ? '當月營收' : 'Curr revenue'}
+                  {renderSortArrow('revenueCurrent')}
                 </th>
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
-                  onClick={() => handleSort('uberPrev')}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => handleSort('revenuePrev')}
                 >
-                  {isZh ? 'Uber 前一月' : 'Uber Prev'}
-                  {renderSortArrow('uberPrev')}
+                  {isZh ? '前一月營收' : 'Prev revenue'}
+                  {renderSortArrow('revenuePrev')}
                 </th>
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
-                  onClick={() => handleSort('uberMom')}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => handleSort('revenueMom')}
                 >
-                  {isZh ? 'Uber MoM' : 'Uber MoM'}
-                  {renderSortArrow('uberMom')}
+                  {isZh ? '營收 MoM' : 'Rev MoM'}
+                  {renderSortArrow('revenueMom')}
+                </th>
+
+                {/* 單量 */}
+                <th
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => handleSort('ordersCurrent')}
+                >
+                  {isZh ? '當月單量' : 'Curr orders'}
+                  {renderSortArrow('ordersCurrent')}
                 </th>
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
-                  onClick={() => handleSort('fantuanCurrent')}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => handleSort('ordersMom')}
                 >
-                  {isZh ? 'Fantuan 當月' : 'Fantuan Current'}
-                  {renderSortArrow('fantuanCurrent')}
+                  {isZh ? '單量變化' : 'Orders MoM'}
+                  {renderSortArrow('ordersMom')}
+                </th>
+
+                {/* 客單價 */}
+                <th
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => handleSort('aovCurrent')}
+                >
+                  {isZh ? '當月客單價' : 'Curr AOV'}
+                  {renderSortArrow('aovCurrent')}
                 </th>
                 <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
-                  onClick={() => handleSort('fantuanPrev')}
+                  style={{
+                    textAlign: 'right',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => handleSort('aovMom')}
                 >
-                  {isZh ? 'Fantuan 前一月' : 'Fantuan Prev'}
-                  {renderSortArrow('fantuanPrev')}
-                </th>
-                <th
-                  style={{ textAlign: 'right', padding: '6px 4px', cursor: 'pointer' }}
-                  onClick={() => handleSort('fantuanMom')}
-                >
-                  {isZh ? 'Fantuan MoM' : 'Fantuan MoM'}
-                  {renderSortArrow('fantuanMom')}
+                  {isZh ? '客單價變化' : 'AOV MoM'}
+                  {renderSortArrow('aovMom')}
                 </th>
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map(row => (
+              {sortedRows.map((row) => (
                 <tr
                   key={`${row.region}-${row.store_name}`}
                   style={{ borderBottom: '1px solid #111827' }}
                 >
-                  <td style={{ padding: '6px 4px' }}>{row.region}</td>
                   <td style={{ padding: '6px 4px' }}>{row.store_name}</td>
+
+                  {/* 營收 */}
                   <td style={{ padding: '6px 4px', textAlign: 'right' }}>
-                    {row.uberCurrent ? formatCurrency(row.uberCurrent) : '—'}
+                    {formatCurrency(row.revenueCurrent)}
                   </td>
                   <td style={{ padding: '6px 4px', textAlign: 'right' }}>
-                    {row.uberPrev !== null ? formatCurrency(row.uberPrev) : '—'}
-                  </td>
-                  <td
-                    style={{
-                      padding: '6px 4px',
-                      textAlign: 'right',
-                      ...momCellStyle(row.uberMom),
-                    }}
-                  >
-                    {formatPercent(row.uberMom)}
-                  </td>
-                  <td style={{ padding: '6px 4px', textAlign: 'right' }}>
-                    {row.fantuanCurrent
-                      ? formatCurrency(row.fantuanCurrent)
-                      : '—'}
-                  </td>
-                  <td style={{ padding: '6px 4px', textAlign: 'right' }}>
-                    {row.fantuanPrev !== null
-                      ? formatCurrency(row.fantuanPrev)
+                    {row.revenuePrev != null
+                      ? formatCurrency(row.revenuePrev)
                       : '—'}
                   </td>
                   <td
                     style={{
                       padding: '6px 4px',
                       textAlign: 'right',
-                      ...momCellStyle(row.fantuanMom),
+                      ...momCellStyle(row.revenueMom),
                     }}
                   >
-                    {formatPercent(row.fantuanMom)}
+                    {formatPercent(row.revenueMom)}
+                  </td>
+
+                  {/* 單量 */}
+                  <td style={{ padding: '6px 4px', textAlign: 'right' }}>
+                    {formatNumber(row.ordersCurrent)}
+                  </td>
+                  <td
+                    style={{
+                      padding: '6px 4px',
+                      textAlign: 'right',
+                      ...momCellStyle(row.ordersMom),
+                    }}
+                  >
+                    {formatPercent(row.ordersMom)}
+                  </td>
+
+                  {/* 客單價 */}
+                  <td style={{ padding: '6px 4px', textAlign: 'right' }}>
+                    {formatAov(row.aovCurrent)}
+                  </td>
+                  <td
+                    style={{
+                      padding: '6px 4px',
+                      textAlign: 'right',
+                      ...momCellStyle(row.aovMom),
+                    }}
+                  >
+                    {formatPercent(row.aovMom)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+
+          {/* 近三個月門店長條圖 */}
+          {trendMonths.length > 0 &&
+            sortedTrendSeries.length > 0 &&
+            maxTrendValue > 0 && (
+              <>
+                <div
+                  style={{
+                    height: 1,
+                    background: '#111827',
+                    margin: '12px 0 10px',
+                  }}
+                />
+                <div style={{ marginBottom: 8 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: '#e5e7eb',
+                      marginBottom: 2,
+                    }}
+                  >
+                    {isZh
+                      ? '近三個月門店營收趨勢'
+                      : '3-month store revenue trend'}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                    {isZh ? '平台：' : 'Platform: '}
+                    {platformLabel(platformFilter, isZh)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    position: 'relative',
+                    height: 190,
+                    padding: '10px 0 12px',
+                    overflowX: 'auto',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      gap: 14,
+                      height: '100%',
+                      paddingRight: 8,
+                    }}
+                  >
+                    {sortedTrendSeries.map((series) => (
+                      <div
+                        key={`${series.region}-${series.store_name}`}
+                        style={{
+                          minWidth: 56,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                        }}
+                      >
+                        {/* bars */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-end',
+                            gap: 4,
+                            height: 140,
+                          }}
+                        >
+                          {series.values.map((rawV, idx) => {
+                            const v = Number(rawV || 0);
+                            const ratio =
+                              maxTrendValue > 0 ? v / maxTrendValue : 0;
+                            const height = Math.max(4, ratio * 120); // 120px 留空間放標籤
+                            const isLatest = idx === latestIndex;
+                            const rounded = Math.round(v);
+
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  position: 'relative',
+                                  width: 10,
+                                  borderRadius: 9999,
+                                  backgroundColor:
+                                    MONTH_COLORS[idx % MONTH_COLORS.length],
+                                  height,
+                                }}
+                              >
+                                {isLatest && (
+                                  <span
+                                    style={{
+                                      position: 'absolute',
+                                      bottom: height + 4,
+                                      left: '50%',
+                                      transform: 'translateX(-50%)',
+                                      fontSize: 9,
+                                      color: '#e5e7eb',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {rounded === 0
+                                      ? '0'
+                                      : rounded.toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 10,
+                            color: '#9ca3af',
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {series.store_name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 月份 legend */}
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 12,
+                    fontSize: 10,
+                    color: '#9ca3af',
+                    marginTop: 4,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  {trendMonths.map((m, idx) => (
+                    <div
+                      key={m}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                    >
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: 9999,
+                          backgroundColor:
+                            MONTH_COLORS[idx % MONTH_COLORS.length],
+                        }}
+                      />
+                      <span>{monthLabel(m, language)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
         </div>
       )}
     </section>
   );
 };
+
+

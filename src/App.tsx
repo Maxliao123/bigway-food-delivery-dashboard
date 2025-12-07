@@ -1,4 +1,4 @@
-/ src/App.tsx
+// src/App.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { useDashboardData } from './hooks/useDashboardData';
@@ -207,3 +207,4 @@ const monthLabel = (iso: string) => {
 }
 
 export default App;
+
