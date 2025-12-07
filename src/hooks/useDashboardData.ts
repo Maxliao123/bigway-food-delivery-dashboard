@@ -29,25 +29,29 @@ type DashboardState = {
   currentMonth: string | null;
   prevMonth: string | null;
 
+  // 這三張卡片用的 KPI（會依 selectedRegion 改變）
   revenueKpi: Kpi | null;
   ordersKpi: Kpi | null;
   aovKpi: Kpi | null;
 
+  // 區域 KPI（BC / ON / CA 一覽）
   regionalRevenueKpis: RegionalKpi[];
   regionalOrdersKpis: RegionalKpi[];
   regionalAovKpis: RegionalKpi[];
 
+  // 各平台 KPI（Region + Platform 一列）
   platformRevenueKpis: PlatformKpi[];
   platformOrdersKpis: PlatformKpi[];
   platformAovKpis: PlatformKpi[];
 
+  // 原始資料與月份清單（給其他 hook 用）
   allMonths: string[];
   rawRows: SalesRow[];
 };
 
 export type SalesRow = {
   month: string;
-  region: string;
+  region: string;   // 'BC' | 'ON' | 'CA'
   platform: string;
   revenue: number;
   orders: number;
@@ -58,10 +62,10 @@ function calcMom(curr: number, prev: number): number | null {
   return (curr - prev) / prev;
 }
 
-// 🟦 最小改動 #1：新增 selectedRegion
+// ⭐ 關鍵：這裡收 `selectedMonth` + `selectedRegion`
 export function useDashboardData(
   selectedMonth?: string,
-  selectedRegion?: string
+  selectedRegion?: string, // 'BC' | 'ON' | 'CA'
 ): DashboardState {
   const [state, setState] = useState<DashboardState>({
     loading: true,
@@ -106,13 +110,15 @@ export function useDashboardData(
         return;
       }
 
+      // 1) 月份列表
       const months = Array.from(new Set(rows.map(r => r.month))).sort();
 
-      let currentMonth = selectedMonth || months[months.length - 1];
-
+      // 如果前端沒指定，就用最後一個月份
+      const currentMonth = selectedMonth || months[months.length - 1];
       const idx = months.indexOf(currentMonth);
       const prevMonth = idx > 0 ? months[idx - 1] : null;
 
+      // 2) 聚合 key
       type AggKey = `${string}|${string}`;
       const agg: Record<AggKey, { revenue: number; orders: number }> = {};
 
@@ -144,6 +150,7 @@ export function useDashboardData(
         if (!month) return { revenue: 0, orders: 0 };
 
         if (!region) {
+          // 「全 Region 總和」的後備方案
           return regions.reduce(
             (acc, reg) => {
               const item = agg[`${month}|${reg}` as AggKey];
@@ -153,7 +160,7 @@ export function useDashboardData(
               }
               return acc;
             },
-            { revenue: 0, orders: 0 }
+            { revenue: 0, orders: 0 },
           );
         }
 
@@ -170,8 +177,12 @@ export function useDashboardData(
         );
       };
 
-      // 🟦 最小改動 #2：卡片 KPI 改成用 selectedRegion
-      const regionForCard = selectedRegion || null;
+      // ⭐ 真正關鍵：卡片 KPI 依 selectedRegion 計算
+      //    - 例如選 BC → 只算 BC 的各平台加總
+      //    - prevMonth 也用同一個 region
+      const regionForCard = selectedRegion && selectedRegion.trim() !== ''
+        ? selectedRegion
+        : undefined;
 
       const globalCurr = regionForCard
         ? getAgg(currentMonth, regionForCard)
@@ -204,7 +215,7 @@ export function useDashboardData(
         mom: calcMom(currAov, prevAov),
       };
 
-      // Regional KPI
+      // 5) Regional KPI 保持原本「全 Region 一覽」
       const regionalRevenueKpis: RegionalKpi[] = [];
       const regionalOrdersKpis: RegionalKpi[] = [];
       const regionalAovKpis: RegionalKpi[] = [];
@@ -238,7 +249,7 @@ export function useDashboardData(
         });
       }
 
-      // Platform KPIs
+      // 6) Platform KPI：每個 region + platform
       const platformRevenueKpis: PlatformKpi[] = [];
       const platformOrdersKpis: PlatformKpi[] = [];
       const platformAovKpis: PlatformKpi[] = [];
@@ -296,8 +307,9 @@ export function useDashboardData(
       });
     }
 
+    // ⭐ 只要月份或地區改變，就重算 KPI
     load();
-  }, [selectedMonth, selectedRegion]); // 🟦 最小改動 #3：加入 selectedRegion 觸發更新
+  }, [selectedMonth, selectedRegion]);
 
   return state;
 }
