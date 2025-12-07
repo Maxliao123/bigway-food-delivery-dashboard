@@ -33,9 +33,7 @@ function formatCurrency2(value: number | null): string {
   );
 }
 
-function formatPercentDelta(
-  value: number | null,
-): { text: string; color: string } {
+function formatPercentDelta(value: number | null): { text: string; color: string } {
   if (value == null || Number.isNaN(value)) {
     return { text: '—', color: '#9ca3af' };
   }
@@ -65,7 +63,7 @@ export const UberAdsPanel: React.FC<Props> = ({
   language,
   selectedRegion,
   currentMonthIso,
-  prevMonthIso, // 目前沒顯示，但留著給 hook 用
+  prevMonthIso,
 }) => {
   const isZh = language === 'zh';
 
@@ -75,15 +73,14 @@ export const UberAdsPanel: React.FC<Props> = ({
     prevMonthIso,
   );
 
-  // 依當月 spend 由高到低排序
   const sortedRows: UberAdsMetricRow[] = useMemo(() => {
     const copy = [...rows];
+    // 依當月 spend 由高到低排序
     copy.sort((a, b) => (b.curr.spend ?? 0) - (a.curr.spend ?? 0));
     return copy;
   }, [rows]);
 
-  // 標題右側要顯示的月份：一律用「目前分析月份」
-  const currentMonthLabel = monthLabel(currentMonthIso, language);
+  const monthText = monthLabel(currentMonthIso, language);
 
   return (
     <section
@@ -107,7 +104,17 @@ export const UberAdsPanel: React.FC<Props> = ({
         }}
       >
         <div>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>
+          {/* 這裡調整字級／字體，靠齊「Platform breakdown — Total revenue」 */}
+          <h2
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: '#9ca3af',
+              marginBottom: 2,
+            }}
+          >
             {isZh ? 'Uber 廣告成效' : 'Uber Ads performance'}
           </h2>
           <p style={{ fontSize: 12, color: '#9ca3af' }}>
@@ -117,7 +124,26 @@ export const UberAdsPanel: React.FC<Props> = ({
           </p>
         </div>
 
-        
+        {/* 如果你還保留 Region / Month，可以讓它留著 */}
+        <div
+          style={{
+            fontSize: 11,
+            color: '#9ca3af',
+            textAlign: 'right',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          <span>
+            {isZh ? 'Region：' : 'Region: '}
+            {selectedRegion || '—'}
+          </span>
+          <span>
+            {isZh ? '月份：' : 'Month: '}
+            {monthText}
+          </span>
+        </div>
       </div>
 
       {/* 狀態列 */}
