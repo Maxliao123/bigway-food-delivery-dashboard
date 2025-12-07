@@ -531,16 +531,18 @@ function App() {
               </section>
 
               {/* 3️⃣ Uber Ads Metrics Panel */}
-            <section className="section-card">
+           {/* 3️⃣ Uber Ads Metrics Panel */}
+<section className="section-card">
   <UberAdsPanel
     language={language}
     selectedRegion={selectedRegion}
-    // ✅ 直接用 Analysis month 下拉選到的那個月
+    // ✅ 直接吃「Analysis month 下拉」選到的月份
     currentMonthIso={selectedMonth}
-    // ✅ 對比月份 = 在 allMonths 中的前一個
+    // ✅ 用 allMonths + selectedMonth 算出的「對比月份」
     prevMonthIso={prevSelectableMonth}
   />
 </section>
+
             </main>
           )}
       </div>
