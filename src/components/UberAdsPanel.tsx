@@ -117,25 +117,7 @@ export const UberAdsPanel: React.FC<Props> = ({
           </p>
         </div>
 
-        <div
-          style={{
-            fontSize: 11,
-            color: '#9ca3af',
-            textAlign: 'right',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-          }}
-        >
-          <span>
-            {isZh ? 'Region：' : 'Region: '}
-            {selectedRegion || '—'}
-          </span>
-          <span>
-            {isZh ? '月份：' : 'Month: '}
-            {monthText}
-          </span>
-        </div>
+        
       </div>
 
       {/* 狀態列 */}
