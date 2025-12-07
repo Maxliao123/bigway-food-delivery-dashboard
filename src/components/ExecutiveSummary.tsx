@@ -91,9 +91,9 @@ const getDeltaClass = (value: number | null | undefined) => {
 
 /**
  * 近三個月平台趨勢折線圖
- * - 使用 min/max + padding 當 Y 軸範圍，避免線段全貼上緣
- * - 加 5 條 grid 線，讓高度區分更清楚
- * - 避免同一個月份的數字標籤互相重疊
+ * - UBER = 藍, Fantuan = 綠, Doordash = 黃（固定顏色）
+ * - Y 軸用 min/max + padding，線條不要貼頂
+ * - 字級略縮小，避免擠在一起
  */
 const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
   series,
@@ -159,16 +159,16 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
     return margin.top + chartHeight - ratio * chartHeight;
   };
 
-  // 固定平台顏色：UBER = 藍、Fantuan = 綠、Doordash = 黃
+  // 固定平台顏色
   const PLATFORM_COLORS: Record<string, string> = {
-    UBER: '#3b82f6',
-    Fantuan: '#22c55e',
-    Doordash: '#eab308',
+    UBER: '#3b82f6', // 藍
+    Fantuan: '#22c55e', // 綠
+    Doordash: '#eab308', // 黃
   };
   const FALLBACK_COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
 
   // 三條線時字級再小一點，避免互相擠壓
-  const labelFontSize = series.length >= 3 ? 10 : 11;
+  const labelFontSize = series.length >= 3 ? 9 : 10;
 
   // 避免同一個 x 位置上標籤互相重疊
   const usedLabelY: Record<number, number[]> = {};
@@ -226,14 +226,14 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
           );
         })}
 
-        {/* X 軸月份標籤 */}
+        {/* X 軸月份標籤（字級稍微縮小） */}
         {months.map((m, idx) => (
           <text
             key={m}
             x={getX(idx)}
             y={margin.top + chartHeight + 18}
             textAnchor="middle"
-            fontSize={12}
+            fontSize={11}
             fill="rgba(255,255,255,0.55)"
           >
             {monthLabelFn(m)}
@@ -305,15 +305,15 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
           const color =
             PLATFORM_COLORS[s.platform] ??
             FALLBACK_COLORS[si % FALLBACK_COLORS.length];
-        return (
-          <div key={s.platform} className="platform-trend-legend-item">
-            <span
-              className="platform-trend-legend-dot"
-              style={{ backgroundColor: color }}
-            />
-            <span>{s.platform}</span>
-          </div>
-        );
+          return (
+            <div key={s.platform} className="platform-trend-legend-item">
+              <span
+                className="platform-trend-legend-dot"
+                style={{ backgroundColor: color }}
+              />
+              <span>{s.platform}</span>
+            </div>
+          );
         })}
       </div>
     </div>
@@ -382,6 +382,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
     return allMonths[selectedIndex - 12];
   }, [allMonths, selectedIndex]);
 
+  // 「近三個月」只給下方 line chart 用
   const periodMonths = useMemo(() => {
     if (selectedIndex === -1) return [] as string[];
     const start = Math.max(0, selectedIndex - 2);
@@ -430,67 +431,42 @@ export const ExecutiveSummary: React.FC<Props> = ({
   };
 
   // ======= KPI（上方三張卡片）=======
-  const cardKpis = useMemo(() => {
-    if (!selectedMonth) {
-      return {
-        revenue: revenueKpi,
-        orders: ordersKpi,
-        aov: aovKpi,
-      };
-    }
+  // 這裡改回：直接用外層傳進來的 revenueKpi / ordersKpi / aovKpi（只看當月 vs 前月）
+  const cardKpis = useMemo(
+    () => ({
+      revenue: revenueKpi,
+      orders: ordersKpi,
+      aov: aovKpi,
+    }),
+    [revenueKpi, ordersKpi, aovKpi],
+  );
 
-    const scopeFilter = (row: SalesRow) => row.region === selectedRegion;
-
-    const currAgg = sumForMonths(periodMonths, scopeFilter);
-    const prevAgg = sumForMonths(prevMonths, scopeFilter);
-
-    const currAov =
-      currAgg.orders > 0 ? currAgg.revenue / currAgg.orders : 0;
-    const prevAov =
-      prevAgg.orders > 0 ? prevAgg.revenue / prevAgg.orders : 0;
-
-    const makeKpi = (curr: number, prev: number) => ({
-      current: curr,
-      previous: prev,
-      mom: !prev || prev === 0 ? null : (curr - prev) / prev,
-    });
-
-    return {
-      revenue: makeKpi(currAgg.revenue, prevAgg.revenue),
-      orders: makeKpi(currAgg.orders, prevAgg.orders),
-      aov: makeKpi(currAov, prevAov),
-    };
-  }, [
-    aovKpi,
-    selectedRegion,
-    selectedMonth,
-    ordersKpi,
-    periodMonths,
-    prevMonths,
-    revenueKpi,
-    rawRows,
-  ]);
-
-  // ======= 下方平台表格 =======
+  // ======= 下方平台表格：只看「選定月份」，不是 3 個月加總 =======
   const breakdownRows: BreakdownRow[] = useMemo(() => {
-    if (!periodMonths.length) return [];
+    if (!selectedMonth) return [];
 
-    const groups = Array.from(
+    // 當月所有平台
+    const platforms = Array.from(
       new Set(
         rawRows
-          .filter((r) => r.region === selectedRegion)
+          .filter(
+            (r) => r.region === selectedRegion && r.month === selectedMonth,
+          )
           .map((r) => r.platform),
       ),
     ).sort();
 
     const rows: BreakdownRow[] = [];
 
-    for (const key of groups) {
+    for (const key of platforms) {
       const filterFn = (row: SalesRow) =>
         row.region === selectedRegion && row.platform === key;
 
-      const currAgg = sumForMonths(periodMonths, filterFn);
+      // 當月
+      const currAgg = sumForMonths([selectedMonth], filterFn);
+      // 前一月（如果有）
       const prevAgg = sumForMonths(prevMonths, filterFn);
+      // 去年同月（如果有）
       const yoyAgg = sumForMonths(yoyMonths, filterFn);
 
       const pickMetric = (agg: { revenue: number; orders: number }) => {
@@ -534,14 +510,14 @@ export const ExecutiveSummary: React.FC<Props> = ({
     }));
   }, [
     activeMetric,
-    periodMonths,
     prevMonths,
-    yoyMonths,
-    rawRows,
+    selectedMonth,
     selectedRegion,
+    rawRows,
+    yoyMonths,
   ]);
 
-  // ======= 近三個月趨勢資料 =======
+  // ======= 近三個月趨勢資料：維持 3 個月加總 =======
   const platformTrendSeries: TrendSeries[] = useMemo(() => {
     if (!periodMonths.length) return [];
 
@@ -823,7 +799,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
             <thead>
               <tr>
                 <th style={{ textAlign: 'left' }}>
-                  {isZh ? '平台' : 'Platform'}
+                  {firstColumnLabel}
                 </th>
                 <th style={{ textAlign: 'right' }}>
                   <button
@@ -984,4 +960,5 @@ export const ExecutiveSummary: React.FC<Props> = ({
     </div>
   );
 };
+
 
