@@ -1,218 +1,174 @@
 // src/components/UberAdsPanel.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import type { Lang } from '../App';
-import {
-  useUberAdsMetrics,
-  type UberAdsMetricRow,
-} from '../hooks/useUberAdsMetrics';
+import { useUberAdsMetrics, UberAdsMetricRow } from '../hooks/useUberAdsMetrics';
+
+type Props = {
+  language: Lang;
+  selectedRegion: string;
+  currentMonthIso: string | null;
+  prevMonthIso: string | null;
+};
 
 function formatCurrency(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '$0';
+  if (value == null || !Number.isFinite(value)) return '—';
   return (
     '$' +
     value.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     })
   );
 }
 
-function formatNumber(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '0';
-  return value.toLocaleString(undefined, {
-    maximumFractionDigits: 0,
-  });
+function formatCurrency2(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return (
+    '$' +
+    value.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  );
 }
 
-function formatPercent(value: number | null): string {
-  if (value == null || Number.isNaN(value)) return '—';
-  const pct = value * 100;
-  return `${pct.toFixed(1)}%`;
-}
-
-function momCellStyle(v: number | null): React.CSSProperties {
-  if (v == null || Number.isNaN(v)) {
-    return { color: '#9ca3af' };
+function formatPercentDelta(value: number | null): { text: string; color: string } {
+  if (value == null || Number.isNaN(value)) {
+    return { text: '—', color: '#9ca3af' };
   }
-  if (v > 0) return { color: '#22c55e' }; // 綠
-  if (v < 0) return { color: '#f97373' }; // 紅
-  return { color: '#9ca3af' };
+  const pct = (value * 100).toFixed(1) + '%';
+  if (value > 0) return { text: pct, color: '#22c55e' };
+  if (value < 0) return { text: pct, color: '#f97373' };
+  return { text: pct, color: '#9ca3af' };
 }
 
-type Props = {
-  language: Lang;
-  selectedRegion: string;
-  selectedMonth: string; // YYYY-MM-01，跟其他 hooks 一樣
-};
+function formatRoas(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return value.toFixed(2) + 'x';
+}
 
-type SortKey =
-  | 'store_name'
-  | 'spend'
-  | 'spend_delta_pct'
-  | 'daily_spend'
-  | 'roas'
-  | 'roas_delta_pct'
-  | 'avg_cost_per_order';
-
-type SortState = {
-  key: SortKey;
-  direction: 'asc' | 'desc';
-};
-
-const monthLabel = (iso: string, lang: Lang) => {
+function monthLabel(iso: string | null, lang: Lang): string {
+  if (!iso) return '—';
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso.slice(0, 7);
-  return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', {
+  if (Number.isNaN(d.getTime())) return iso;
+  const opts: Intl.DateTimeFormatOptions = {
     month: 'short',
     year: 'numeric',
-  });
-};
+  };
+  return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', opts);
+}
 
 export const UberAdsPanel: React.FC<Props> = ({
   language,
   selectedRegion,
-  selectedMonth,
+  currentMonthIso,
+  prevMonthIso,
 }) => {
   const isZh = language === 'zh';
 
   const { loading, error, rows } = useUberAdsMetrics(
     selectedRegion,
-    selectedMonth,
+    currentMonthIso,
+    prevMonthIso,
   );
 
-  const [sort, setSort] = useState<SortState>({
-    key: 'spend',
-    direction: 'desc',
-  });
-
-  const handleSort = (key: SortKey) => {
-    setSort((prev) => {
-      if (prev.key === key) {
-        return {
-          key,
-          direction: prev.direction === 'asc' ? 'desc' : 'asc',
-        };
-      }
-      return { key, direction: 'desc' };
-    });
-  };
-
-  const sortedRows = useMemo(() => {
+  const sortedRows: UberAdsMetricRow[] = useMemo(() => {
     const copy = [...rows];
-    const dir = sort.direction === 'asc' ? 1 : -1;
-
-    copy.sort((a, b) => {
-      const va = a[sort.key] as number | string | null | undefined;
-      const vb = b[sort.key] as number | string | null | undefined;
-
-      // store_name 用字串比較
-      if (sort.key === 'store_name') {
-        return String(va ?? '').localeCompare(String(vb ?? '')) * dir;
-      }
-
-      const na = typeof va === 'number' ? va : va == null ? -Infinity : Number(va);
-      const nb = typeof vb === 'number' ? vb : vb == null ? -Infinity : Number(vb);
-
-      if (na === nb) return 0;
-      return na > nb ? dir : -dir;
-    });
-
+    // 依當月 spend 由高到低排序
+    copy.sort(
+      (a, b) => (b.curr.spend ?? 0) - (a.curr.spend ?? 0),
+    );
     return copy;
-  }, [rows, sort]);
+  }, [rows]);
 
-  const renderSortArrow = (key: SortKey) => {
-    if (sort.key !== key) return ' ↕';
-    return sort.direction === 'asc' ? ' ↑' : ' ↓';
-  };
-
-  const monthDisplay = selectedMonth
-    ? monthLabel(selectedMonth, language)
-    : '—';
+  const monthText = monthLabel(currentMonthIso, language);
 
   return (
-    <section style={{ marginTop: 16 }}>
+    <section
+      style={{
+        marginTop: 16,
+        borderRadius: 16,
+        border: '1px solid #4b5563',
+        background: '#020617',
+        padding: '12px 16px 16px',
+      }}
+    >
+      {/* 標題列 */}
       <div
         style={{
-          borderRadius: 16,
-          border: '1px solid #4b5563',
-          background: '#020617',
-          padding: '12px 16px',
-          overflowX: 'auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 12,
+          alignItems: 'flex-start',
+          marginBottom: 8,
+          flexWrap: 'wrap',
         }}
       >
-        {/* 標題列 */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 12,
-            marginBottom: 8,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div>
-            <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
-              {isZh ? 'Uber 廣告成效' : 'Uber Ads performance'}
-            </h2>
-            <p style={{ fontSize: 13, color: '#9ca3af' }}>
-              {isZh
-                ? '各門店在 Uber 廣告上的投放與 ROAS 表現。'
-                : 'Store-level Uber ad spend, ROAS and efficiency.'}
-            </p>
-          </div>
-
-          <div
-            style={{
-              fontSize: 11,
-              color: '#6b7280',
-              textAlign: 'right',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'flex-end',
-              gap: 2,
-            }}
-          >
-            <span>
-              {isZh ? '區域：' : 'Region: '}
-              {selectedRegion || '—'}
-            </span>
-            <span>
-              {isZh ? '月份：' : 'Month: '}
-              {monthDisplay}
-            </span>
-          </div>
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>
+            {isZh ? 'Uber 廣告成效' : 'Uber Ads performance'}
+          </h2>
+          <p style={{ fontSize: 12, color: '#9ca3af' }}>
+            {isZh
+              ? '門店層級的 Uber 廣告花費、ROAS 與效率。'
+              : 'Store-level Uber ad spend, ROAS and efficiency.'}
+          </p>
         </div>
 
-        {loading && (
-          <div style={{ fontSize: 13 }}>
-            {isZh ? '正在載入 Uber 廣告數據…' : 'Loading Uber Ads metrics...'}
-          </div>
-        )}
+        <div
+          style={{
+            fontSize: 11,
+            color: '#9ca3af',
+            textAlign: 'right',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          <span>
+            {isZh ? 'Region：' : 'Region: '}{selectedRegion || '—'}
+          </span>
+          <span>
+            {isZh ? '月份：' : 'Month: '}{monthText}
+          </span>
+        </div>
+      </div>
 
-        {error && (
-          <div style={{ fontSize: 13, color: '#f97373' }}>
-            {isZh
-              ? '載入 Uber 廣告數據發生錯誤：'
-              : 'Error loading Uber Ads metrics: '}
-            {error}
-          </div>
-        )}
+      {/* 狀態列 */}
+      {loading && (
+        <div style={{ fontSize: 12, color: '#e5e7eb' }}>
+          {isZh ? '正在載入 Uber 廣告資料…' : 'Loading Uber Ads metrics…'}
+        </div>
+      )}
+      {!loading && error && (
+        <div style={{ fontSize: 12, color: '#f97373' }}>
+          {isZh
+            ? `載入 Uber 廣告資料錯誤：${error}`
+            : `Error loading Uber Ads metrics: ${error}`}
+        </div>
+      )}
 
-        {!loading && !error && (
-          <>
-            {rows.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 4 }}>
-                {isZh
-                  ? '此區域與月份暫無 Uber 廣告資料。'
-                  : 'No Uber Ads data for this region and month.'}
-              </div>
-            ) : (
+      {!loading && !error && (
+        <>
+          {sortedRows.length === 0 ? (
+            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+              {isZh
+                ? '目前沒有這個區域、這個月份的 Uber 廣告資料。'
+                : 'No Uber ads data for this region and month yet.'}
+            </div>
+          ) : (
+            <div
+              style={{
+                marginTop: 8,
+                overflowX: 'auto',
+              }}
+            >
               <table
                 style={{
                   width: '100%',
+                  borderCollapse: 'collapse',
                   fontSize: 12,
                   color: '#e5e7eb',
-                  borderCollapse: 'collapse',
-                  marginTop: 4,
                 }}
               >
                 <thead>
@@ -226,150 +182,139 @@ export const UberAdsPanel: React.FC<Props> = ({
                       style={{
                         textAlign: 'left',
                         padding: '6px 4px',
-                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                       }}
-                      onClick={() => handleSort('store_name')}
                     >
                       {isZh ? '店名' : 'Store'}
-                      {renderSortArrow('store_name')}
                     </th>
                     <th
                       style={{
                         textAlign: 'right',
                         padding: '6px 4px',
-                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                       }}
-                      onClick={() => handleSort('spend')}
                     >
-                      {isZh ? '廣告花費' : 'Spend'}
-                      {renderSortArrow('spend')}
+                      Spend
                     </th>
                     <th
                       style={{
                         textAlign: 'right',
                         padding: '6px 4px',
-                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                       }}
-                      onClick={() => handleSort('spend_delta_pct')}
                     >
-                      {isZh ? '花費變化' : 'Spend Δ%'}
-                      {renderSortArrow('spend_delta_pct')}
+                      Spend Δ%
                     </th>
                     <th
                       style={{
                         textAlign: 'right',
                         padding: '6px 4px',
-                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                       }}
-                      onClick={() => handleSort('daily_spend')}
                     >
                       {isZh ? '日均花費' : 'Daily spend'}
-                      {renderSortArrow('daily_spend')}
                     </th>
                     <th
                       style={{
                         textAlign: 'right',
                         padding: '6px 4px',
-                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                       }}
-                      onClick={() => handleSort('roas')}
                     >
                       ROAS
-                      {renderSortArrow('roas')}
                     </th>
                     <th
                       style={{
                         textAlign: 'right',
                         padding: '6px 4px',
-                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                       }}
-                      onClick={() => handleSort('roas_delta_pct')}
                     >
-                      {isZh ? 'ROAS 變化' : 'ROAS Δ%'}
-                      {renderSortArrow('roas_delta_pct')}
+                      ROAS Δ%
                     </th>
                     <th
                       style={{
                         textAlign: 'right',
                         padding: '6px 4px',
-                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                       }}
-                      onClick={() => handleSort('avg_cost_per_order')}
                     >
-                      {isZh ? '平均每單成本' : 'Avg cost / order'}
-                      {renderSortArrow('avg_cost_per_order')}
+                      {isZh ? '平均每單成本' : 'Average cost per order'}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedRows.map((row: UberAdsMetricRow) => (
-                    <tr
-                      key={`${row.region}-${row.store_name}-${row.month_date}`}
-                      style={{ borderBottom: '1px solid #111827' }}
-                    >
-                      <td style={{ padding: '6px 4px' }}>{row.store_name}</td>
-                      <td
-                        style={{
-                          padding: '6px 4px',
-                          textAlign: 'right',
-                        }}
+                  {sortedRows.map((row) => {
+                    const spendDelta = formatPercentDelta(row.spend_delta_pct);
+                    const roasDelta = formatPercentDelta(row.roas_delta_pct);
+
+                    return (
+                      <tr
+                        key={`${row.region}-${row.store_name}`}
+                        style={{ borderBottom: '1px solid #111827' }}
                       >
-                        {formatCurrency(row.spend)}
-                      </td>
-                      <td
-                        style={{
-                          padding: '6px 4px',
-                          textAlign: 'right',
-                          ...momCellStyle(row.spend_delta_pct),
-                        }}
-                      >
-                        {formatPercent(row.spend_delta_pct)}
-                      </td>
-                      <td
-                        style={{
-                          padding: '6px 4px',
-                          textAlign: 'right',
-                        }}
-                      >
-                        {formatCurrency(row.daily_spend)}
-                      </td>
-                      <td
-                        style={{
-                          padding: '6px 4px',
-                          textAlign: 'right',
-                        }}
-                      >
-                        {row.roas == null || !Number.isFinite(row.roas)
-                          ? '—'
-                          : row.roas.toFixed(2)}
-                      </td>
-                      <td
-                        style={{
-                          padding: '6px 4px',
-                          textAlign: 'right',
-                          ...momCellStyle(row.roas_delta_pct),
-                        }}
-                      >
-                        {formatPercent(row.roas_delta_pct)}
-                      </td>
-                      <td
-                        style={{
-                          padding: '6px 4px',
-                          textAlign: 'right',
-                        }}
-                      >
-                        {formatCurrency(row.avg_cost_per_order)}
-                      </td>
-                    </tr>
-                  ))}
+                        <td style={{ padding: '6px 4px', whiteSpace: 'nowrap' }}>
+                          {row.store_name}
+                        </td>
+                        <td
+                          style={{
+                            padding: '6px 4px',
+                            textAlign: 'right',
+                          }}
+                        >
+                          {formatCurrency(row.curr.spend)}
+                        </td>
+                        <td
+                          style={{
+                            padding: '6px 4px',
+                            textAlign: 'right',
+                            color: spendDelta.color,
+                          }}
+                        >
+                          {spendDelta.text}
+                        </td>
+                        <td
+                          style={{
+                            padding: '6px 4px',
+                            textAlign: 'right',
+                          }}
+                        >
+                          {formatCurrency(row.curr.daily_spend)}
+                        </td>
+                        <td
+                          style={{
+                            padding: '6px 4px',
+                            textAlign: 'right',
+                          }}
+                        >
+                          {formatRoas(row.curr.roas)}
+                        </td>
+                        <td
+                          style={{
+                            padding: '6px 4px',
+                            textAlign: 'right',
+                            color: roasDelta.color,
+                          }}
+                        >
+                          {roasDelta.text}
+                        </td>
+                        <td
+                          style={{
+                            padding: '6px 4px',
+                            textAlign: 'right',
+                          }}
+                        >
+                          {formatCurrency2(row.curr.avg_cost_per_order)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-            )}
-          </>
-        )}
-      </div>
+            </div>
+          )}
+        </>
+      )}
     </section>
   );
 };
-
-export default UberAdsPanel;
