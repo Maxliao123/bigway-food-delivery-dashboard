@@ -1,540 +1,551 @@
-// src/App.tsx
-import React, { useEffect, useMemo, useState } from 'react';
-import './App.css';
-import { useDashboardData } from './hooks/useDashboardData';
-import { ExecutiveSummary } from './components/ExecutiveSummary';
-import { PlatformMatrix } from './components/PlatformMatrix';
-// ⭐ 新增：Uber Ads 板塊
-import { UberAdsPanel } from './components/UberAdsPanel';
+// src/components/UberAdsPanel.tsx
+import React, { useMemo, useState } from 'react';
+import type { Lang } from '../App';
+import { useUberAdsMetrics } from '../hooks/useUberAdsMetrics';
+import type { UberAdsMetricRow } from '../hooks/useUberAdsMetrics';
 
-// ⭐ 新增：Supabase Auth
-import type { Session } from '@supabase/supabase-js';
-import { supabase } from './lib/supabaseClient';
+type Props = {
+  language: Lang;
+  selectedRegion: string;
+  currentMonthIso: string | null;
+  prevMonthIso: string | null;
+};
 
-export type Lang = 'en' | 'zh';
-export type Scope = 'BC' | 'ON' | 'CA';
-type RoleScope = Scope | 'ALL';
+// ========= 小工具 =========
+type Kpi = {
+  current: number | null;
+  previous: number | null;
+  mom: number | null;
+};
 
-function App() {
-  // ===== Auth 狀態 =====
-  const [session, setSession] = useState<Session | null>(null);
-  const [role, setRole] = useState<RoleScope | null>(null); // user_roles.role
-  const [authLoading, setAuthLoading] = useState<boolean>(true);
-  const [authError, setAuthError] = useState<string | null>(null);
+type SortKey =
+  | 'store'
+  | 'sales'
+  | 'spend'
+  | 'dailySpend'
+  | 'roas'
+  | 'roasDelta'
+  | 'cpo';
 
-  // login form：只輸入「帳號代碼 + 密碼」
-  const [accountCode, setAccountCode] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
+type SortState = {
+  key: SortKey;
+  direction: 'asc' | 'desc';
+};
 
-  // ===== Dashboard 狀態 =====
-  const [selectedRegion, setSelectedRegion] = useState<Scope>('BC');
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
-
-  // 允許看到哪些 Region（依角色）
-  const effectiveRole: RoleScope = role ?? 'ALL';
-  const allowedRegions: Scope[] =
-    effectiveRole === 'ALL' ? ['BC', 'ON', 'CA'] : [effectiveRole];
-
-  // 角色一旦變成 BC/ON/CA，就強制鎖定 Region
-  useEffect(() => {
-    if (effectiveRole !== 'ALL' && selectedRegion !== effectiveRole) {
-      setSelectedRegion(effectiveRole);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveRole]);
-
-  const {
-    loading,
-    error,
-    currentMonth,
-    prevMonth,
-    revenueKpi,
-    ordersKpi,
-    aovKpi,
-    regionalRevenueKpis,
-    regionalOrdersKpis,
-    regionalAovKpis,
-    platformRevenueKpis,
-    platformOrdersKpis,
-    platformAovKpis,
-    allMonths,
-    rawRows,
-  } = useDashboardData(selectedMonth ?? undefined, selectedRegion);
-
-  const [language, setLanguage] = useState<Lang>('en');
-  const isZh = language === 'zh';
-
-  const title = isZh ? 'Food Delivery 外送儀表板' : 'Food Delivery Intelligence';
-  const subtitle = isZh
-    ? 'BC / CA / ON 外送平台的整體表現總覽'
-    : 'Strategic dashboard for BC / CA / ON delivery performance.';
-  const metaText = isZh
-    ? '資料來源 · Supabase · 自動更新'
-    : 'Data source · Supabase · Auto-refreshed';
-
-  // ===== 讀取現有登入狀態 + 對應角色 =====
-  useEffect(() => {
-    const init = async () => {
-      setAuthLoading(true);
-      setAuthError(null);
-
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        setAuthError(error.message);
-        setAuthLoading(false);
-        return;
-      }
-
-      const currentSession = data.session ?? null;
-      setSession(currentSession);
-
-      if (currentSession?.user) {
-        const { user } = currentSession;
-        const { data: roleRow, error: roleErr } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (roleErr) {
-          setAuthError(roleErr.message);
-        } else if (roleRow?.role) {
-          setRole(roleRow.role as RoleScope);
-        } else {
-          // 若沒找到，就當 ALL（COO 等級）
-          setRole('ALL');
-        }
-      }
-
-      setAuthLoading(false);
-    };
-
-    void init();
-  }, []);
-
-  // ===== 登入動作：accountCode -> email + password =====
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError(null);
-    setAuthLoading(true);
-
-    const trimmed = accountCode.trim().toLowerCase();
-    if (!trimmed) {
-      setAuthError(isZh ? '請輸入帳號代碼（bc / on / ca / all）' : 'Please enter account code (bc / on / ca / all).');
-      setAuthLoading(false);
-      return;
-    }
-
-    // 轉成內部 email，例如 bc -> bc@dashboard.internal
-    const email = `${trimmed}@dashboard.internal`;
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error || !data.session) {
-      setAuthError(error?.message ?? (isZh ? '登入失敗' : 'Login failed'));
-      setAuthLoading(false);
-      return;
-    }
-
-    setSession(data.session);
-
-    // 讀取 user_roles.role
-    const { data: roleRow, error: roleErr } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', data.session.user.id)
-      .maybeSingle();
-
-    if (roleErr) {
-      setAuthError(roleErr.message);
-      setRole('ALL');
-    } else if (roleRow?.role) {
-      setRole(roleRow.role as RoleScope);
-    } else {
-      setRole('ALL');
-    }
-
-    setAuthLoading(false);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setRole(null);
-    setAccountCode('');
-    setPassword('');
-  };
-
-  // ===== 月份選單初始化 =====
-  useEffect(() => {
-    if (allMonths.length && !selectedMonth) {
-      setSelectedMonth(allMonths[allMonths.length - 1]);
-    }
-  }, [allMonths, selectedMonth]);
-
-  const prevSelectableMonth = useMemo(() => {
-    if (!selectedMonth) return null;
-    const idx = allMonths.indexOf(selectedMonth);
-    if (idx > 0) return allMonths[idx - 1];
-    return null;
-  }, [allMonths, selectedMonth]);
-
-  const monthLabel = (iso: string) => {
-    const short = iso.slice(0, 7); // "YYYY-MM"
-    const [year, month] = short.split('-');
-    const mNum = Number(month);
-    if (!year || !mNum || Number.isNaN(mNum)) return short;
-
-    const MONTHS = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return `${MONTHS[mNum - 1]} ${year}`;
-  };
-
-  // ===== Auth Loading 畫面 =====
-  if (authLoading) {
-    return (
-      <div className="app-root">
-        <div className="app-shell">
-          <div
-            style={{
-              height: '100vh',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#e5e7eb',
-              fontSize: 14,
-            }}
-          >
-            {isZh ? '檢查登入狀態…' : 'Checking session…'}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ===== 尚未登入：顯示登入表單 =====
-  if (!session) {
-    return (
-      <div className="app-root">
-        <div className="app-shell">
-          <div
-            style={{
-              minHeight: '100vh',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <div
-              style={{
-                width: 320,
-                padding: '24px 24px 20px',
-                borderRadius: 16,
-                background: '#020617',
-                border: '1px solid #1f2937',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.45)',
-              }}
-            >
-              <h1
-                style={{
-                  fontSize: 18,
-                  fontWeight: 600,
-                  marginBottom: 4,
-                  color: '#e5e7eb',
-                }}
-              >
-                {isZh ? 'Food Delivery 儀表板登入' : 'Food Delivery Dashboard Login'}
-              </h1>
-              <p
-                style={{
-                  fontSize: 12,
-                  color: '#9ca3af',
-                  marginBottom: 16,
-                }}
-              >
-                {isZh
-                  ? '請輸入帳號代碼（bc / on / ca / all）與密碼。'
-                  : 'Enter account code (bc / on / ca / all) and password.'}
-              </p>
-
-              <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <label style={{ fontSize: 12, color: '#9ca3af' }}>
-                  {isZh ? '帳號代碼' : 'Account code'}
-                  <input
-                    type="text"
-                    value={accountCode}
-                    onChange={(e) => setAccountCode(e.target.value)}
-                    placeholder="bc / on / ca / all"
-                    style={{
-                      marginTop: 4,
-                      width: '100%',
-                      padding: '8px 10px',
-                      borderRadius: 8,
-                      border: '1px solid #374151',
-                      background: '#020617',
-                      color: '#e5e7eb',
-                      fontSize: 13,
-                    }}
-                  />
-                </label>
-
-                <label style={{ fontSize: 12, color: '#9ca3af' }}>
-                  {isZh ? '密碼' : 'Password'}
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    style={{
-                      marginTop: 4,
-                      width: '100%',
-                      padding: '8px 10px',
-                      borderRadius: 8,
-                      border: '1px solid #374151',
-                      background: '#020617',
-                      color: '#e5e7eb',
-                      fontSize: 13,
-                    }}
-                  />
-                </label>
-
-                {authError && (
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: '#f97373',
-                      marginTop: 4,
-                    }}
-                  >
-                    {authError}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  style={{
-                    marginTop: 6,
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 9999,
-                    border: 'none',
-                    background:
-                      authLoading ? '#1f2937' : 'linear-gradient(90deg,#2563eb,#4f46e5)',
-                    color: '#f9fafb',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    cursor: authLoading ? 'default' : 'pointer',
-                  }}
-                >
-                  {authLoading
-                    ? isZh
-                      ? '登入中…'
-                      : 'Signing in…'
-                    : isZh
-                    ? '登入'
-                    : 'Sign in'}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ===== 已登入：顯示原本儀表板 =====
-  return (
-    <div className="app-root">
-      <div className="app-shell">
-        {/* ===== Header / Title Bar ===== */}
-        <header className="app-header">
-          <div>
-            <p className="app-badge">
-              {isZh ? 'FOOD DELIVERY · 內部' : 'FOOD DELIVERY · INTERNAL'}
-            </p>
-            <h1 className="app-title">{title}</h1>
-            <p className="app-subtitle">{subtitle}</p>
-          </div>
-
-          <div className="app-meta">
-            <span className="app-meta-pill">{metaText}</span>
-
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div className="lang-toggle">
-                <button
-                  className={
-                    'lang-button' + (language === 'en' ? ' lang-button-active' : '')
-                  }
-                  onClick={() => setLanguage('en')}
-                >
-                  EN
-                </button>
-                <button
-                  className={
-                    'lang-button' + (language === 'zh' ? ' lang-button-active' : '')
-                  }
-                  onClick={() => setLanguage('zh')}
-                >
-                  中文
-                </button>
-              </div>
-
-              {/* 小小的使用者區塊 + 登出 */}
-              <button
-                onClick={handleLogout}
-                style={{
-                  marginLeft: 8,
-                  padding: '4px 10px',
-                  borderRadius: 9999,
-                  border: '1px solid #374151',
-                  background: 'transparent',
-                  color: '#9ca3af',
-                  fontSize: 11,
-                  cursor: 'pointer',
-                }}
-              >
-                {isZh ? '登出' : 'Sign out'}
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* ===== Global Filters ===== */}
-        {!loading && !error && allMonths.length > 0 && (
-          <div className="filter-bar">
-            <div className="filter-group">
-              <span className="filter-label">{isZh ? '區域' : 'Region'}</span>
-              <div className="scope-toggle">
-                {(['BC', 'ON', 'CA'] as Scope[]).map((region) => {
-                  const disabled = !allowedRegions.includes(region);
-                  return (
-                    <button
-                      key={region}
-                      type="button"
-                      className={
-                        'scope-pill' +
-                        (selectedRegion === region ? ' scope-pill-active' : '') +
-                        (disabled ? ' scope-pill-disabled' : '')
-                      }
-                      onClick={() => {
-                        if (!disabled) setSelectedRegion(region);
-                      }}
-                      disabled={disabled}
-                    >
-                      {region}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <span className="filter-label">
-                {isZh ? '分析月份' : 'Analysis month'}
-              </span>
-              <select
-                className="filter-select"
-                value={selectedMonth ?? ''}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-              >
-                {allMonths.map((m) => (
-                  <option key={m} value={m}>
-                    {monthLabel(m)}
-                  </option>
-                ))}
-              </select>
-              {prevSelectableMonth && (
-                <span className="filter-hint">
-                  {isZh ? '對比' : 'vs'} {monthLabel(prevSelectableMonth)}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ===== Loading / Error ===== */}
-        {loading && (
-          <div className="status status-loading">
-            {isZh ? '資料載入中…' : 'Loading data…'}
-          </div>
-        )}
-
-        {error && (
-          <div className="status status-error">
-            {isZh ? '載入資料發生錯誤：' : 'Error loading data: '}
-            {error}
-          </div>
-        )}
-
-        {/* ===== Main Dashboard ===== */}
-        {!loading &&
-          !error &&
-          revenueKpi &&
-          ordersKpi &&
-          aovKpi &&
-          selectedMonth && (
-            <main className="dashboard-grid">
-              {/* 1️⃣ KPI + Regional / Platform summary */}
-              <section className="section-card section-kpi">
-                <ExecutiveSummary
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                  currentMonth={currentMonth}
-                  prevMonth={prevMonth}
-                  revenueKpi={revenueKpi}
-                  ordersKpi={ordersKpi}
-                  aovKpi={aovKpi}
-                  regionalRevenueKpis={regionalRevenueKpis}
-                  regionalOrdersKpis={regionalOrdersKpis}
-                  regionalAovKpis={regionalAovKpis}
-                  platformRevenueKpis={platformRevenueKpis}
-                  platformOrdersKpis={platformOrdersKpis}
-                  platformAovKpis={platformAovKpis}
-                  allMonths={allMonths}
-                  rawRows={rawRows}
-                />
-              </section>
-
-              {/* 2️⃣ Platform Velocity Matrix */}
-              <section className="section-card">
-                <PlatformMatrix
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                />
-              </section>
-
-              {/* 3️⃣ Uber Ads Metrics Panel（新板塊） */}
-              <section className="section-card">
-                <UberAdsPanel
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  currentMonthIso={selectedMonth}
-                  prevMonthIso={prevMonth}
-                />
-              </section>
-            </main>
-          )}
-      </div>
-    </div>
-  );
+function formatCurrency(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return '-';
+  return `$${value.toLocaleString('en-CA', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
 }
 
-export default App;
+function formatCurrency2(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return '-';
+  return `$${value.toFixed(2)}`;
+}
+
+function formatPercent(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return '-';
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatX(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return '-';
+  return `${value.toFixed(2)}x`;
+}
+
+function monthLabel(iso: string, lang: Lang): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 7);
+  const opts: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'short',
+  };
+  return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', opts);
+}
+
+// 單店的 AD Sales = Spend × ROAS
+function calcSales(row: UberAdsMetricRow): number | null {
+  const spend = row.curr.spend ?? 0;
+  const roas = row.curr.roas ?? 0;
+  const sales = spend * roas;
+  if (!Number.isFinite(sales) || sales <= 0) return null;
+  return sales;
+}
+
+export const UberAdsPanel: React.FC<Props> = ({
+  language,
+  selectedRegion,
+  currentMonthIso,
+  prevMonthIso,
+}) => {
+  const isZh = language === 'zh';
+
+  const { loading, error, rows } = useUberAdsMetrics(
+    selectedRegion,
+    currentMonthIso,
+    prevMonthIso,
+  );
+
+  const [sort, setSort] = useState<SortState>({
+    key: 'sales',
+    direction: 'desc',
+  });
+
+  const sortedRows = useMemo(() => {
+    const comparer = (a: UberAdsMetricRow, b: UberAdsMetricRow) => {
+      const dir = sort.direction === 'asc' ? 1 : -1;
+
+      const valueFor = (row: UberAdsMetricRow): number => {
+        switch (sort.key) {
+          case 'store':
+            return row.store_name.localeCompare(b.store_name);
+          case 'sales':
+            return calcSales(row) ?? -Infinity;
+          case 'spend':
+            return row.curr.spend ?? -Infinity;
+          case 'dailySpend':
+            return row.curr.daily_spend ?? -Infinity;
+          case 'roas':
+            return row.curr.roas ?? -Infinity;
+          case 'roasDelta':
+            return row.roas_delta_pct ?? -Infinity;
+          case 'cpo':
+            return row.curr.avg_cost_per_order ?? Infinity;
+          default:
+            return 0;
+        }
+      };
+
+      const av = valueFor(a);
+      const bv = valueFor(b);
+
+      if (av === bv) {
+        return a.store_name.localeCompare(b.store_name) * dir;
+      }
+      return av > bv ? dir : -dir;
+    };
+
+    return [...rows].sort(comparer);
+  }, [rows, sort]);
+
+  const totalKpis = useMemo(() => {
+    let totalSpendCurr = 0;
+    let totalSpendPrev = 0;
+    let totalSalesCurr = 0;
+    let totalSalesPrev = 0;
+    let totalRoasCurr = 0;
+    let totalRoasPrev = 0;
+    let countRoasCurr = 0;
+    let countRoasPrev = 0;
+
+    for (const row of rows) {
+      const currSpend = row.curr.spend ?? 0;
+      const prevSpend = row.prev.spend ?? 0;
+      const currRoas = row.curr.roas ?? 0;
+      const prevRoas = row.prev.roas ?? 0;
+
+      totalSpendCurr += currSpend;
+      totalSpendPrev += prevSpend;
+
+      totalSalesCurr += currSpend * currRoas;
+      totalSalesPrev += prevSpend * prevRoas;
+
+      if (row.curr.roas != null) {
+        totalRoasCurr += row.curr.roas;
+        countRoasCurr += 1;
+      }
+
+      if (row.prev.roas != null) {
+        totalRoasPrev += row.prev.roas;
+        countRoasPrev += 1;
+      }
+    }
+
+    const avgRoasCurr =
+      countRoasCurr > 0 ? totalRoasCurr / countRoasCurr : null;
+    const avgRoasPrev =
+      countRoasPrev > 0 ? totalRoasPrev / countRoasPrev : null;
+
+    const totalSalesKpi: Kpi = {
+      current: totalSalesCurr || null,
+      previous: totalSalesPrev || null,
+      mom:
+        totalSalesCurr && totalSalesPrev
+          ? (totalSalesCurr - totalSalesPrev) / totalSalesPrev
+          : null,
+    };
+
+    const totalSpendKpi: Kpi = {
+      current: totalSpendCurr || null,
+      previous: totalSpendPrev || null,
+      mom:
+        totalSpendCurr && totalSpendPrev
+          ? (totalSpendCurr - totalSpendPrev) / totalSpendPrev
+          : null,
+    };
+
+    const avgRoasKpi: Kpi = {
+      current: avgRoasCurr,
+      previous: avgRoasPrev,
+      mom:
+        avgRoasCurr != null &&
+        avgRoasPrev != null &&
+        avgRoasPrev !== 0
+          ? (avgRoasCurr - avgRoasPrev) / avgRoasPrev
+          : null,
+    };
+
+    return {
+      totalSalesKpi,
+      totalSpendKpi,
+      avgRoasKpi,
+    };
+  }, [rows]);
+
+  const handleSort = (key: SortKey) => {
+    setSort((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return { key, direction: 'desc' };
+    });
+  };
+
+  const renderSortIcon = (key: SortKey) => {
+    if (sort.key !== key) return <span className="sort-icon sort-icon-off">↕</span>;
+    return (
+      <span className="sort-icon">
+        {sort.direction === 'asc' ? '↑' : '↓'}
+      </span>
+    );
+  };
+
+  const currentMonthText =
+    currentMonthIso != null
+      ? monthLabel(currentMonthIso, language)
+      : isZh
+      ? '無資料月份'
+      : 'No month';
+
+  const prevMonthText =
+    prevMonthIso != null
+      ? monthLabel(prevMonthIso, language)
+      : isZh
+      ? '無前期'
+      : 'No prev month';
+
+  const { totalSalesKpi, totalSpendKpi, avgRoasKpi } = totalKpis;
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <div>
+          <h2 className="panel-title">
+            {isZh ? 'UBER ADS 成效' : 'UBER ADS PERFORMANCE'}
+          </h2>
+          <p className="panel-subtitle">
+            {isZh
+              ? '各門店的 Uber 廣告花費、ROAS 與效率。'
+              : 'Store-level Uber ad spend, ROAS and efficiency.'}
+          </p>
+        </div>
+        <div className="panel-meta">
+          <div className="panel-meta-line">
+            <span className="panel-meta-label">
+              {isZh ? '區域' : 'Region'}:
+            </span>
+            <span className="panel-meta-value">{selectedRegion}</span>
+          </div>
+          <div className="panel-meta-line">
+            <span className="panel-meta-label">
+              {isZh ? '月份' : 'Month'}:
+            </span>
+            <span className="panel-meta-value">{currentMonthText}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI cards */}
+      {!loading && !error && (
+        <div className="kpi-grid" style={{ marginBottom: 28 }}>
+          {/* Total AD Sales */}
+          <div className="kpi-card">
+            <div className="kpi-title">
+              {isZh ? 'Total AD Sales' : 'Total AD Sales'}
+            </div>
+            <div className="kpi-value">
+              {formatCurrency(totalSalesKpi.current)}
+            </div>
+            <div className="kpi-sub">
+              {prevMonthIso
+                ? `${isZh ? 'vs' : 'vs'} ${prevMonthText}`
+                : isZh
+                ? '無對比月份'
+                : 'No comparison month'}{' '}
+              <span
+                className={
+                  totalSalesKpi.mom == null
+                    ? 'kpi-mom-neutral'
+                    : totalSalesKpi.mom >= 0
+                    ? 'kpi-mom-positive'
+                    : 'kpi-mom-negative'
+                }
+              >
+                {totalSalesKpi.mom != null
+                  ? formatPercent(totalSalesKpi.mom)
+                  : '-'}
+              </span>
+            </div>
+          </div>
+
+          {/* Total AD Spend */}
+          <div className="kpi-card">
+            <div className="kpi-title">
+              {isZh ? 'Total AD Spend' : 'Total AD Spend'}
+            </div>
+            <div className="kpi-value">
+              {formatCurrency(totalSpendKpi.current)}
+            </div>
+            <div className="kpi-sub">
+              {prevMonthIso
+                ? `${isZh ? 'vs' : 'vs'} ${prevMonthText}`
+                : isZh
+                ? '無對比月份'
+                : 'No comparison month'}{' '}
+              <span
+                className={
+                  totalSpendKpi.mom == null
+                    ? 'kpi-mom-neutral'
+                    : totalSpendKpi.mom >= 0
+                    ? 'kpi-mom-positive'
+                    : 'kpi-mom-negative'
+                }
+              >
+                {totalSpendKpi.mom != null
+                  ? formatPercent(totalSpendKpi.mom)
+                  : '-'}
+              </span>
+            </div>
+          </div>
+
+          {/* Avg ROAS */}
+          <div className="kpi-card">
+            <div className="kpi-title">
+              {isZh ? 'Avg ROAS' : 'Avg ROAS'}
+            </div>
+            <div className="kpi-value">
+              {avgRoasKpi.current != null
+                ? formatX(avgRoasKpi.current)
+                : '-'}
+            </div>
+            <div className="kpi-sub">
+              {prevMonthIso
+                ? `${isZh ? 'vs' : 'vs'} ${prevMonthText}`
+                : isZh
+                ? '無對比月份'
+                : 'No comparison month'}{' '}
+              <span
+                className={
+                  avgRoasKpi.mom == null
+                    ? 'kpi-mom-neutral'
+                    : avgRoasKpi.mom >= 0
+                    ? 'kpi-mom-positive'
+                    : 'kpi-mom-negative'
+                }
+              >
+                {avgRoasKpi.mom != null
+                  ? formatPercent(avgRoasKpi.mom)
+                  : '-'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
+      {loading ? (
+        <div className="panel-loading">
+          {isZh ? '讀取 Uber 廣告資料中…' : 'Loading Uber Ads data…'}
+        </div>
+      ) : error ? (
+        <div className="panel-error">
+          {isZh ? '讀取資料發生錯誤：' : 'Error loading data: '}
+          {error}
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="panel-empty">
+          {isZh
+            ? '這個區域 / 月份目前沒有 Uber Ads 資料。'
+            : 'No Uber Ads data for this region and month yet.'}
+        </div>
+      ) : (
+        <div
+          style={{
+            marginTop: 16,
+            overflowX: 'auto',
+          }}
+        >
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              minWidth: 900,
+            }}
+          >
+            <thead>
+              <tr>
+                <th className="table-header-left">
+                  <button
+                    type="button"
+                    className="table-header-button"
+                    onClick={() => handleSort('store')}
+                  >
+                    {isZh ? '門店' : 'Store'}
+                    {renderSortIcon('store')}
+                  </button>
+                </th>
+
+                {/* AD Sales */}
+                <th>
+                  <button
+                    type="button"
+                    className="table-header-button"
+                    onClick={() => handleSort('sales')}
+                    style={{
+                      display: 'inline-flex',
+                      gap: 6,
+                      alignItems: 'center',
+                    }}
+                  >
+                    {isZh ? 'AD Sales' : 'AD Sales'}
+                    {renderSortIcon('sales')}
+                  </button>
+                </th>
+
+                {/* AD Spend */}
+                <th>
+                  <button
+                    type="button"
+                    className="table-header-button"
+                    onClick={() => handleSort('spend')}
+                    style={{
+                      display: 'inline-flex',
+                      gap: 6,
+                      alignItems: 'center',
+                    }}
+                  >
+                    AD Spend
+                    {renderSortIcon('spend')}
+                  </button>
+                </th>
+
+                {/* Daily AD Spend */}
+                <th>
+                  <button
+                    type="button"
+                    className="table-header-button"
+                    onClick={() => handleSort('dailySpend')}
+                    style={{
+                      display: 'inline-flex',
+                      gap: 6,
+                      alignItems: 'center',
+                    }}
+                  >
+                    {isZh ? '日均 AD Spend' : 'Daily AD Spend'}
+                    {renderSortIcon('dailySpend')}
+                  </button>
+                </th>
+
+                {/* ROAS */}
+                <th>
+                  <button
+                    type="button"
+                    className="table-header-button"
+                    onClick={() => handleSort('roas')}
+                  >
+                    ROAS
+                    {renderSortIcon('roas')}
+                  </button>
+                </th>
+
+                {/* ROAS Δ% */}
+                <th>
+                  <button
+                    type="button"
+                    className="table-header-button"
+                    onClick={() => handleSort('roasDelta')}
+                  >
+                    ROAS Δ%
+                    {renderSortIcon('roasDelta')}
+                  </button>
+                </th>
+
+                {/* CPO */}
+                <th className="table-header-right">
+                  <button
+                    type="button"
+                    className="table-header-button"
+                    onClick={() => handleSort('cpo')}
+                  >
+                    CPO
+                    {renderSortIcon('cpo')}
+                  </button>
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {sortedRows.map((row) => {
+                const sales = calcSales(row);
+                const spend = row.curr.spend;
+                const dailySpend = row.curr.daily_spend;
+                const roas = row.curr.roas;
+                const roasDelta = row.roas_delta_pct;
+                const cpo = row.curr.avg_cost_per_order;
+
+                return (
+                  <tr key={row.store_name}>
+                    <td className="table-cell-left">{row.store_name}</td>
+                    {/* AD Sales */}
+                    <td className="table-cell">{formatCurrency(sales)}</td>
+                    {/* AD Spend */}
+                    <td className="table-cell">{formatCurrency(spend)}</td>
+                    {/* Daily AD Spend */}
+                    <td className="table-cell">
+                      {formatCurrency(dailySpend)}
+                    </td>
+                    {/* ROAS */}
+                    <td className="table-cell">{formatX(roas)}</td>
+                    {/* ROAS Δ% */}
+                    <td
+                      className={
+                        roasDelta == null
+                          ? 'table-cell'
+                          : roasDelta >= 0
+                          ? 'table-cell-positive'
+                          : 'table-cell-negative'
+                      }
+                    >
+                      {formatPercent(roasDelta)}
+                    </td>
+                    {/* CPO */}
+                    <td className="table-cell-right">
+                      {formatCurrency2(cpo)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
 
