@@ -640,7 +640,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
       formatter: formatNumber,
     },
     aov: {
-      labelEn: 'Global AOV',
+      labelEn: 'AOV',
       labelZh: '整體客單價',
       formatter: formatAov,
     },
@@ -658,7 +658,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
       zh: '平台拆分 — 訂單數',
     },
     aov: {
-      en: 'Platform breakdown — Global AOV',
+      en: 'Platform breakdown — AOV',
       zh: '平台拆分 — 客單價',
     },
   };
