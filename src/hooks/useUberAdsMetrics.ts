@@ -2,82 +2,91 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-type UberAdsRow = {
+export type UberAdsMetricRow = {
   region: string;
   store_name: string;
-  month_date: string; // ISO date string
-  spend: number;
-  sales: number | null;
-  orders: number | null;
+  month_date: string; // YYYY-MM-DD
+  spend: number | null;
+  spend_delta_pct: number | null;
+  daily_spend: number | null;
   roas: number | null;
+  roas_delta_pct: number | null;
   avg_cost_per_order: number | null;
 };
 
-type StoreMetrics = {
-  store_name: string;
-  curr: UberAdsRow | null;
-  prev: UberAdsRow | null;
+export type UseUberAdsMetricsResult = {
+  loading: boolean;
+  error: string | null;
+  rows: UberAdsMetricRow[];
 };
 
+/**
+ * 依照 Region + month_date 抓 Uber Ads 指標
+ *
+ * @param region      例如 "BC" / "CA" / "ON"
+ * @param monthDate   例如 "2025-10-01"（和 uber_ads_metrics.month_date 對應）
+ */
 export function useUberAdsMetrics(
   region: string,
-  analysisMonthIso: string, // 例如 '2025-10'
-) {
-  const [loading, setLoading] = useState(false);
+  monthDate: string,
+): UseUberAdsMetricsResult {
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [rows, setRows] = useState<StoreMetrics[]>([]);
+  const [rows, setRows] = useState<UberAdsMetricRow[]>([]);
 
   useEffect(() => {
-    if (!region || !analysisMonthIso) return;
+    // 沒選月份就清空
+    if (!monthDate) {
+      setRows([]);
+      return;
+    }
 
-    const load = async () => {
+    let cancelled = false;
+
+    async function fetchData() {
       setLoading(true);
       setError(null);
-      try {
-        // 1. 把 '2025-10' 轉成 '2025-10-01' & 前一個月
-        const [year, month] = analysisMonthIso.split('-').map(Number);
-        const currDate = new Date(year, month - 1, 1);
-        const prevDate = new Date(year, month - 2, 1);
 
-        const currStr = currDate.toISOString().slice(0, 10);
-        const prevStr = prevDate.toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from('uber_ads_metrics')
+        .select(
+          `
+          region,
+          store_name,
+          month_date,
+          spend,
+          spend_delta_pct,
+          daily_spend,
+          roas,
+          roas_delta_pct,
+          avg_cost_per_order
+        `,
+        )
+        .eq('region', region)
+        .eq('month_date', monthDate)
+        .order('store_name', { ascending: true });
 
-        const { data, error } = await supabase
-          .from<UberAdsRow>('uber_ads_metrics')
-          .select('*')
-          .eq('region', region)
-          .in('month_date', [currStr, prevStr])
-          .order('store_name', { ascending: true });
+      if (cancelled) return;
 
-        if (error) throw error;
-
-        // 2. group by store_name → { curr, prev }
-        const map = new Map<string, StoreMetrics>();
-
-        for (const row of data ?? []) {
-          const key = row.store_name;
-          if (!map.has(key)) {
-            map.set(key, { store_name: key, curr: null, prev: null });
-          }
-          const entry = map.get(key)!;
-          if (row.month_date === currStr) {
-            entry.curr = row;
-          } else if (row.month_date === prevStr) {
-            entry.prev = row;
-          }
-        }
-
-        setRows(Array.from(map.values()));
-      } catch (err: any) {
-        console.error(err);
-        setError(err.message ?? 'Failed to load uber ads metrics');
-      } finally {
-        setLoading(false);
+      if (error) {
+        console.error('Failed to load uber_ads_metrics:', error);
+        setError(error.message ?? 'Failed to load Uber Ads metrics');
+        setRows([]);
+      } else {
+        // 保險轉型；supabase 型別推論有時候是 any
+        setRows((data ?? []) as UberAdsMetricRow[]);
       }
-    };
 
-    void load();
-  }, [region, analysisMonthIso]);
+      setLoading(false);
+    }
+
+    fetchData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [region, monthDate]);
 
   return { loading, error, rows };
 }
+
