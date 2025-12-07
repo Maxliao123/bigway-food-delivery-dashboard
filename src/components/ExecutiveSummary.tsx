@@ -168,7 +168,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
   const FALLBACK_COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
 
   // 數值標籤字級與上方 Platform breakdown 表格一致
-  const labelFontSize = 12;
+  const labelFontSize = 5;
 
   // 避免同一個 x 位置上標籤互相重疊
   const usedLabelY: Record<number, number[]> = {};
