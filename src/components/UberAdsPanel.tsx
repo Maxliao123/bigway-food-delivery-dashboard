@@ -84,14 +84,38 @@ function calcMom(curr: number | null, prev: number | null): number | null {
 
 function monthLabel(iso: string | null, lang: Lang): string {
   if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const opts: Intl.DateTimeFormatOptions = {
-    month: 'short',
-    year: 'numeric',
-  };
-  return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', opts);
+
+  // 只吃 "YYYY-MM"，避免任何時區 / Date 物件造成月份跑掉
+  const short = iso.slice(0, 7); // e.g. "2025-11"
+  const [year, month] = short.split('-');
+  const mNum = Number(month);
+
+  if (!year || !mNum || Number.isNaN(mNum)) {
+    return short;
+  }
+
+  if (lang === 'zh') {
+    return `${year}年${mNum}月`;
+  }
+
+  const MONTHS = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  return `${MONTHS[mNum - 1]} ${year}`;
 }
+
 
 // 單店的 AD Sales：直接吃 Supabase 的 sales
 function calcSales(row: UberAdsMetricRow): number | null {
