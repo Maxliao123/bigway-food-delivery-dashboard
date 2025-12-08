@@ -150,7 +150,7 @@ export function useUberAdsMetrics(
 
           // 這裡照你的需求：Daily AD Spend = sales / 天數
           const daily_spend =
-            currSales != null ? currSales / daysInMonth : null;
+            currSales != null ? currSpend / daysInMonth : null;
 
           return {
             region: bucket.region,
