@@ -28,7 +28,7 @@ type SortKey =
   | 'cpo';
 
 function formatCurrency(value: number | null): string {
-  // KPI 卡片用：顯示為整數（金額累加已在內部先算到小數第二位）
+  // KPI 卡片用：顯示為整數
   if (value == null || !Number.isFinite(value)) return '—';
   return (
     '$' +
@@ -84,50 +84,18 @@ function calcMom(curr: number | null, prev: number | null): number | null {
 
 function monthLabel(iso: string | null, lang: Lang): string {
   if (!iso) return '—';
-
-  // 只吃 "YYYY-MM"，避免任何時區 / Date 物件干擾
-  const short = iso.slice(0, 7); // e.g. "2025-11"
-  const [year, month] = short.split('-');
-  const mNum = Number(month);
-
-  if (!year || !mNum || Number.isNaN(mNum)) {
-    return short;
-  }
-
-  if (lang === 'zh') {
-    return `${year}年${mNum}月`;
-  }
-
-  const MONTHS = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-
-  return `${MONTHS[mNum - 1]} ${year}`;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const opts: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    year: 'numeric',
+  };
+  return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', opts);
 }
 
-// 四捨五入到小數點後兩位（卡片內部運算用）
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
-// 單店的 AD Sales = Spend × ROAS
+// 單店的 AD Sales：直接吃 Supabase 的 sales
 function calcSales(row: UberAdsMetricRow): number | null {
-  const spend = row.curr.spend ?? 0;
-  const roas = row.curr.roas ?? 0;
-  const sales = spend * roas;
-  if (!Number.isFinite(sales) || sales <= 0) return null;
-  return sales;
+  return row.curr.sales ?? null;
 }
 
 export const UberAdsPanel: React.FC<Props> = ({
@@ -155,7 +123,6 @@ export const UberAdsPanel: React.FC<Props> = ({
     : 'No prev month';
 
   // ====== KPI（Total AD Sales / Total AD Spend / Avg ROAS）======
-    // ====== KPI（Total AD Sales / Total AD Spend / Avg ROAS）======
   const kpis = useMemo(() => {
     if (!rows.length) {
       return {
@@ -165,32 +132,23 @@ export const UberAdsPanel: React.FC<Props> = ({
       };
     }
 
-    // 1) 用「原始值」累加，先不要 round
-    let totalSalesCurrRaw = 0;
-    let totalSalesPrevRaw = 0;
-    let totalSpendCurrRaw = 0;
-    let totalSpendPrevRaw = 0;
+    let totalSalesCurr = 0;
+    let totalSalesPrev = 0;
+    let totalSpendCurr = 0;
+    let totalSpendPrev = 0;
 
     for (const row of rows) {
-      const currSpendRaw = row.curr.spend ?? 0;
-      const prevSpendRaw = row.prev.spend ?? 0;
-      const currRoasRaw = row.curr.roas ?? 0;
-      const prevRoasRaw = row.prev.roas ?? 0;
+      const currSales = row.curr.sales ?? 0;
+      const prevSales = row.prev.sales ?? 0;
+      const currSpend = row.curr.spend ?? 0;
+      const prevSpend = row.prev.spend ?? 0;
 
-      totalSpendCurrRaw += currSpendRaw;
-      totalSpendPrevRaw += prevSpendRaw;
-
-      totalSalesCurrRaw += currSpendRaw * currRoasRaw;
-      totalSalesPrevRaw += prevSpendRaw * prevRoasRaw;
+      totalSalesCurr += currSales;
+      totalSalesPrev += prevSales;
+      totalSpendCurr += currSpend;
+      totalSpendPrev += prevSpend;
     }
 
-    // 2) 總和再四捨五入到小數點後兩位（避免浮點誤差）
-    let totalSalesCurr = round2(totalSalesCurrRaw);
-    let totalSalesPrev = round2(totalSalesPrevRaw);
-    let totalSpendCurr = round2(totalSpendCurrRaw);
-    let totalSpendPrev = round2(totalSpendPrevRaw);
-
-    // 3) Avg ROAS 用「兩位小數版總 sales / 總 spend」
     const avgRoasCurr =
       totalSpendCurr > 0 ? totalSalesCurr / totalSpendCurr : null;
     const avgRoasPrev =
@@ -220,7 +178,6 @@ export const UberAdsPanel: React.FC<Props> = ({
       roas: roasKpi,
     };
   }, [rows]);
-
 
   // ====== 排序邏輯 (Click headers to sort) ======
   const sortedRows = useMemo(() => {
@@ -743,5 +700,6 @@ export const UberAdsPanel: React.FC<Props> = ({
     </section>
   );
 };
+
 
 
