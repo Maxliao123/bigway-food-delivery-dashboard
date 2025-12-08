@@ -28,6 +28,7 @@ type SortKey =
   | 'cpo';
 
 function formatCurrency(value: number | null): string {
+  // KPI 卡片用：顯示為整數（金額累加已在內部先算到小數第二位）
   if (value == null || !Number.isFinite(value)) return '—';
   return (
     '$' +
@@ -39,6 +40,7 @@ function formatCurrency(value: number | null): string {
 }
 
 function formatCurrency2(value: number | null): string {
+  // 表格用：顯示到小數點後兩位
   if (value == null || !Number.isFinite(value)) return '—';
   return (
     '$' +
@@ -83,7 +85,7 @@ function calcMom(curr: number | null, prev: number | null): number | null {
 function monthLabel(iso: string | null, lang: Lang): string {
   if (!iso) return '—';
 
-  // 只吃 "YYYY-MM"，避免任何時區 / 日期物件干擾
+  // 只吃 "YYYY-MM"，避免任何時區 / Date 物件干擾
   const short = iso.slice(0, 7); // e.g. "2025-11"
   const [year, month] = short.split('-');
   const mNum = Number(month);
@@ -114,6 +116,10 @@ function monthLabel(iso: string | null, lang: Lang): string {
   return `${MONTHS[mNum - 1]} ${year}`;
 }
 
+// 四捨五入到小數點後兩位（卡片內部運算用）
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 // 單店的 AD Sales = Spend × ROAS
 function calcSales(row: UberAdsMetricRow): number | null {
@@ -164,18 +170,33 @@ export const UberAdsPanel: React.FC<Props> = ({
     let totalSpendPrev = 0;
 
     for (const row of rows) {
-      const currSpend = row.curr.spend ?? 0;
-      const prevSpend = row.prev.spend ?? 0;
-      const currRoas = row.curr.roas ?? 0;
-      const prevRoas = row.prev.roas ?? 0;
+      const currSpendRaw = row.curr.spend ?? 0;
+      const prevSpendRaw = row.prev.spend ?? 0;
+      const currRoasRaw = row.curr.roas ?? 0;
+      const prevRoasRaw = row.prev.roas ?? 0;
 
+      // 1) 每間店先算出「兩位小數」的 spend / sales
+      const currSpend = round2(currSpendRaw);
+      const prevSpend = round2(prevSpendRaw);
+
+      const currSales = round2(currSpendRaw * currRoasRaw);
+      const prevSales = round2(prevSpendRaw * prevRoasRaw);
+
+      // 2) 再用這些兩位小數去加總
       totalSpendCurr += currSpend;
       totalSpendPrev += prevSpend;
 
-      totalSalesCurr += currSpend * currRoas;
-      totalSalesPrev += prevSpend * prevRoas;
+      totalSalesCurr += currSales;
+      totalSalesPrev += prevSales;
     }
 
+    // 3) 總和再四捨五入一次到兩位小數（避免浮點誤差）
+    totalSalesCurr = round2(totalSalesCurr);
+    totalSalesPrev = round2(totalSalesPrev);
+    totalSpendCurr = round2(totalSpendCurr);
+    totalSpendPrev = round2(totalSpendPrev);
+
+    // 4) Avg ROAS 用「兩位小數版總 sales / 總 spend」
     const avgRoasCurr =
       totalSpendCurr > 0 ? totalSalesCurr / totalSpendCurr : null;
     const avgRoasPrev =
