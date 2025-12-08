@@ -6,13 +6,15 @@ export type UberAdsMetricRow = {
   region: string;
   store_name: string;
   curr: {
+    sales: number | null;
     spend: number | null;
-    daily_spend: number | null;
+    daily_spend: number | null; // = sales / days
     roas: number | null;
     orders: number | null;
     avg_cost_per_order: number | null;
   };
   prev: {
+    sales: number | null;
     spend: number | null;
     roas: number | null;
     orders: number | null;
@@ -25,6 +27,7 @@ type RawUberAdsMetric = {
   region: string;
   store_name: string;
   month_date: string;
+  sales: number | null;
   spend: number | null;
   roas: number | null;
   orders: number | null;
@@ -66,7 +69,8 @@ export function useUberAdsMetrics(
       const { data, error } = await supabase
         .from('uber_ads_metrics')
         .select(
-          'region, store_name, month_date, spend, roas, orders, avg_cost_per_order',
+          // 把 sales 一起撈出來
+          'region, store_name, month_date, sales, spend, roas, orders, avg_cost_per_order',
         )
         .eq('region', region)
         .in('month_date', monthFilter)
@@ -84,7 +88,7 @@ export function useUberAdsMetrics(
         return;
       }
 
-      // 算當月天數，用來算 daily spend
+      // 算當月天數，用來算 daily（你要的是 sales / days）
       const daysInMonth = (() => {
         const d = new Date(currentMonthIso);
         if (Number.isNaN(d.getTime())) return 30;
@@ -103,7 +107,11 @@ export function useUberAdsMetrics(
       for (const row of rowsData) {
         const key = row.store_name;
         const bucket =
-          byStore.get(key) ?? { region: row.region, curr: undefined, prev: undefined };
+          byStore.get(key) ?? {
+            region: row.region,
+            curr: undefined,
+            prev: undefined,
+          };
 
         if (row.month_date === currentMonthIso) {
           bucket.curr = row;
@@ -119,6 +127,8 @@ export function useUberAdsMetrics(
           const curr = bucket.curr;
           const prev = bucket.prev;
 
+          const currSales = curr?.sales ?? null;
+          const prevSales = prev?.sales ?? null;
           const currSpend = curr?.spend ?? null;
           const prevSpend = prev?.spend ?? null;
           const currRoas = curr?.roas ?? null;
@@ -138,13 +148,15 @@ export function useUberAdsMetrics(
               ? (currRoas - prevRoas) / prevRoas
               : null;
 
+          // 這裡照你的需求：Daily AD Spend = sales / 天數
           const daily_spend =
-            currSpend != null ? currSpend / daysInMonth : null;
+            currSales != null ? currSales / daysInMonth : null;
 
           return {
             region: bucket.region,
             store_name,
             curr: {
+              sales: currSales,
               spend: currSpend,
               daily_spend,
               roas: currRoas,
@@ -152,6 +164,7 @@ export function useUberAdsMetrics(
               avg_cost_per_order: curr?.avg_cost_per_order ?? null,
             },
             prev: {
+              sales: prevSales,
               spend: prevSpend,
               roas: prevRoas,
               orders: prev?.orders ?? null,
