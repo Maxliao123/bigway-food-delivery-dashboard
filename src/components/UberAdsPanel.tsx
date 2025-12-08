@@ -155,6 +155,7 @@ export const UberAdsPanel: React.FC<Props> = ({
     : 'No prev month';
 
   // ====== KPI（Total AD Sales / Total AD Spend / Avg ROAS）======
+    // ====== KPI（Total AD Sales / Total AD Spend / Avg ROAS）======
   const kpis = useMemo(() => {
     if (!rows.length) {
       return {
@@ -164,10 +165,11 @@ export const UberAdsPanel: React.FC<Props> = ({
       };
     }
 
-    let totalSalesCurr = 0;
-    let totalSalesPrev = 0;
-    let totalSpendCurr = 0;
-    let totalSpendPrev = 0;
+    // 1) 用「原始值」累加，先不要 round
+    let totalSalesCurrRaw = 0;
+    let totalSalesPrevRaw = 0;
+    let totalSpendCurrRaw = 0;
+    let totalSpendPrevRaw = 0;
 
     for (const row of rows) {
       const currSpendRaw = row.curr.spend ?? 0;
@@ -175,28 +177,20 @@ export const UberAdsPanel: React.FC<Props> = ({
       const currRoasRaw = row.curr.roas ?? 0;
       const prevRoasRaw = row.prev.roas ?? 0;
 
-      // 1) 每間店先算出「兩位小數」的 spend / sales
-      const currSpend = round2(currSpendRaw);
-      const prevSpend = round2(prevSpendRaw);
+      totalSpendCurrRaw += currSpendRaw;
+      totalSpendPrevRaw += prevSpendRaw;
 
-      const currSales = round2(currSpendRaw * currRoasRaw);
-      const prevSales = round2(prevSpendRaw * prevRoasRaw);
-
-      // 2) 再用這些兩位小數去加總
-      totalSpendCurr += currSpend;
-      totalSpendPrev += prevSpend;
-
-      totalSalesCurr += currSales;
-      totalSalesPrev += prevSales;
+      totalSalesCurrRaw += currSpendRaw * currRoasRaw;
+      totalSalesPrevRaw += prevSpendRaw * prevRoasRaw;
     }
 
-    // 3) 總和再四捨五入一次到兩位小數（避免浮點誤差）
-    totalSalesCurr = round2(totalSalesCurr);
-    totalSalesPrev = round2(totalSalesPrev);
-    totalSpendCurr = round2(totalSpendCurr);
-    totalSpendPrev = round2(totalSpendPrev);
+    // 2) 總和再四捨五入到小數點後兩位（避免浮點誤差）
+    let totalSalesCurr = round2(totalSalesCurrRaw);
+    let totalSalesPrev = round2(totalSalesPrevRaw);
+    let totalSpendCurr = round2(totalSpendCurrRaw);
+    let totalSpendPrev = round2(totalSpendPrevRaw);
 
-    // 4) Avg ROAS 用「兩位小數版總 sales / 總 spend」
+    // 3) Avg ROAS 用「兩位小數版總 sales / 總 spend」
     const avgRoasCurr =
       totalSpendCurr > 0 ? totalSalesCurr / totalSpendCurr : null;
     const avgRoasPrev =
@@ -226,6 +220,7 @@ export const UberAdsPanel: React.FC<Props> = ({
       roas: roasKpi,
     };
   }, [rows]);
+
 
   // ====== 排序邏輯 (Click headers to sort) ======
   const sortedRows = useMemo(() => {
