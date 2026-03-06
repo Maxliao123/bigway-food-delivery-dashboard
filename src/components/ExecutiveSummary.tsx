@@ -750,17 +750,24 @@ export const ExecutiveSummary: React.FC<Props> = ({
   // AOV: revenue/orders — days cancel out, so no change in daily mode
   const effectiveAovKpi = cardKpis.aov;
 
+  // Effective total biz revenue (÷ days in daily mode)
+  const effectiveTotalBizRevenue = useMemo(() => {
+    if (totalBusinessRevenue == null) return null;
+    return isDaily ? totalBusinessRevenue / daysCurr : totalBusinessRevenue;
+  }, [totalBusinessRevenue, isDaily, daysCurr]);
+
   // Delivery revenue share = delivery revenue / total business revenue
+  // Ratio is the same in both modes (days cancel out)
   const deliveryShare = useMemo(() => {
     if (
-      totalBusinessRevenue == null ||
-      totalBusinessRevenue <= 0 ||
+      effectiveTotalBizRevenue == null ||
+      effectiveTotalBizRevenue <= 0 ||
       effectiveRevenueKpi.current <= 0
     ) {
       return null;
     }
-    return effectiveRevenueKpi.current / totalBusinessRevenue;
-  }, [effectiveRevenueKpi.current, totalBusinessRevenue]);
+    return effectiveRevenueKpi.current / effectiveTotalBizRevenue;
+  }, [effectiveRevenueKpi.current, effectiveTotalBizRevenue]);
 
   return (
     <div className="exec-wrapper">
@@ -857,9 +864,11 @@ export const ExecutiveSummary: React.FC<Props> = ({
                   {isZh ? '外送占比' : 'Delivery %'}
                 </div>
                 <div className="kpi-delivery-share-total">
-                  {isZh ? '整體營收' : 'Total Biz Rev.'}
+                  {isDaily
+                    ? isZh ? '日均整體營收' : 'Daily Biz Rev.'
+                    : isZh ? '整體營收' : 'Total Biz Rev.'}
                   {': '}
-                  {formatCurrency(totalBusinessRevenue ?? null)}
+                  {formatCurrency(effectiveTotalBizRevenue ?? null)}
                 </div>
               </div>
             )}
