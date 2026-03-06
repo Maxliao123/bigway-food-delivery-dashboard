@@ -53,7 +53,7 @@ function momCellStyle(mom: number | null): React.CSSProperties {
 
 // 各平台折線色
 const PLATFORM_BAR_HIGHLIGHT: Record<MatrixPlatformFilter, string> = {
-  ALL: '#ffffff', // 白
+  ALL: '#94a3b8', // 柔灰白（slate-400）
   UBER: '#3b82f6', // 藍
   Fantuan: '#22c55e', // 綠
   Doordash: '#eab308', // 黃
