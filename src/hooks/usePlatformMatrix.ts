@@ -202,8 +202,8 @@ export function usePlatformMatrix(
     );
     setRows(tableRows);
 
-    // ---- 近三個月門店長條圖資料（受 platformFilter 影響）----
-    const startIdx = Math.max(0, idx - 2);
+    // ---- 近六個月門店折線圖資料（受 platformFilter 影響）----
+    const startIdx = Math.max(0, idx - 5);
     const trendMs = months.slice(startIdx, idx + 1);
     setTrendMonths(trendMs);
 

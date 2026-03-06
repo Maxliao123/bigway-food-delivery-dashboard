@@ -50,19 +50,13 @@ function momCellStyle(mom: number | null): React.CSSProperties {
   return { color: '#9ca3af' };
 }
 
-// 灰階：前兩個月份用
-const NEUTRAL_BAR_COLORS = ['#4b5563', '#6b7280'];
-
-// 各平台「最新月份」高亮色
+// 各平台折線色
 const PLATFORM_BAR_HIGHLIGHT: Record<MatrixPlatformFilter, string> = {
   ALL: '#f97316', // 橘
   UBER: '#3b82f6', // 藍
   Fantuan: '#22c55e', // 綠
   Doordash: '#eab308', // 黃
 };
-
-// 3-month store revenue trend：每列最多顯示幾間店
-const STORES_PER_ROW = 10;
 
 // platform mix 堆疊圖：每列最多幾間店
 const STORES_PER_ROW_MIX = 13;
@@ -141,6 +135,153 @@ const monthLabel = (iso: string, lang: Lang) => {
     year: 'numeric',
   };
   return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', opts);
+};
+
+// ========= Per-store mini line chart =========
+
+type StoreLineChartProps = {
+  storeName: string;
+  values: number[];
+  months: string[];
+  lineColor: string;
+  language: Lang;
+  valueFormatter: (v: number) => string;
+};
+
+const StoreLineChart: React.FC<StoreLineChartProps> = ({
+  storeName,
+  values,
+  months,
+  lineColor,
+  language,
+  valueFormatter,
+}) => {
+  const width = 300;
+  const height = 120;
+  const margin = { top: 18, right: 12, bottom: 20, left: 8 };
+  const chartW = width - margin.left - margin.right;
+  const chartH = height - margin.top - margin.bottom;
+
+  const hasData = values.some((v) => v > 0);
+  if (!hasData) return null;
+
+  // Y domain with padding
+  const positiveValues = values.filter((v) => v > 0);
+  const maxV = Math.max(...values);
+  const minV = positiveValues.length > 0 ? Math.min(...positiveValues) : 0;
+
+  let domainMin = minV;
+  let domainMax = maxV;
+
+  if (domainMin === domainMax) {
+    const pad = domainMax === 0 ? 1 : domainMax * 0.1;
+    domainMin -= pad;
+    domainMax += pad;
+  } else {
+    const span = domainMax - domainMin;
+    domainMin -= span * 0.15;
+    domainMax += span * 0.25; // more top padding for labels
+  }
+  if (domainMax <= domainMin) domainMax = domainMin + 1;
+
+  const xStep = months.length > 1 ? chartW / (months.length - 1) : chartW / 2;
+  const getX = (i: number) =>
+    margin.left + (months.length === 1 ? chartW / 2 : xStep * i);
+  const getY = (v: number) => {
+    const clamped = Math.max(domainMin, Math.min(domainMax, v));
+    const ratio = (clamped - domainMin) / (domainMax - domainMin);
+    return margin.top + chartH - ratio * chartH;
+  };
+
+  // Build path
+  const pathD = values
+    .map((v, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(v)}`)
+    .join(' ');
+
+  // Short month labels
+  const fmtMonth = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso.slice(5, 7);
+    return d.toLocaleDateString(language === 'zh' ? 'zh-TW' : 'en-CA', {
+      month: 'short',
+    });
+  };
+
+  const latestValue = values[values.length - 1];
+
+  return (
+    <div className="store-trend-card">
+      <div className="store-trend-card-header">
+        <span className="store-trend-card-name">{storeName}</span>
+        <span className="store-trend-card-latest">
+          {valueFormatter(latestValue)}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%' }}>
+        {/* Baseline */}
+        <line
+          x1={margin.left}
+          y1={margin.top + chartH}
+          x2={margin.left + chartW}
+          y2={margin.top + chartH}
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth={0.5}
+        />
+
+        {/* Line path */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke={lineColor}
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Dots + value labels */}
+        {values.map((v, i) => {
+          const x = getX(i);
+          const y = getY(v);
+          const labelY = y - 6;
+          return (
+            <g key={i}>
+              <circle
+                cx={x}
+                cy={y}
+                r={2.5}
+                fill={lineColor}
+                stroke="#020617"
+                strokeWidth={0.8}
+              />
+              <text
+                x={x}
+                y={Math.max(margin.top + 2, labelY)}
+                textAnchor="middle"
+                fontSize={4.5}
+                fill="rgba(229,231,235,0.85)"
+              >
+                {valueFormatter(v)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* X-axis month labels */}
+        {months.map((m, i) => (
+          <text
+            key={m}
+            x={getX(i)}
+            y={height - 4}
+            textAnchor="middle"
+            fontSize={3.8}
+            fill="rgba(255,255,255,0.45)"
+          >
+            {fmtMonth(m)}
+          </text>
+        ))}
+      </svg>
+    </div>
+  );
 };
 
 export const PlatformMatrix: React.FC<Props> = ({
@@ -251,16 +392,6 @@ export const PlatformMatrix: React.FC<Props> = ({
   };
 
   // bar chart 用：找出最大值 & 依最新月份排序門店
-  const maxTrendValue = useMemo(() => {
-    let max = 0;
-    for (const s of trendSeries) {
-      for (const v of s.values) {
-        if (v > max) max = v;
-      }
-    }
-    return max;
-  }, [trendSeries]);
-
   const sortedTrendSeries = useMemo(() => {
     if (!trendMonths.length || !trendSeries.length) return [];
     const lastIdx = trendMonths.length - 1;
@@ -269,31 +400,16 @@ export const PlatformMatrix: React.FC<Props> = ({
     );
   }, [trendMonths, trendSeries]);
 
-  // 3-month store revenue trend：依列分 chunk
-  const chunkedTrendSeries = useMemo(() => {
-    if (!sortedTrendSeries.length) return [] as typeof sortedTrendSeries[];
-    const chunks: typeof sortedTrendSeries[] = [];
-    for (let i = 0; i < sortedTrendSeries.length; i += STORES_PER_ROW) {
-      chunks.push(sortedTrendSeries.slice(i, i + STORES_PER_ROW));
-    }
-    return chunks;
-  }, [sortedTrendSeries]);
-
-  const latestIndex =
-    trendMonths.length > 0 ? trendMonths.length - 1 : -1;
-
   const highlightColor = PLATFORM_BAR_HIGHLIGHT[platformFilter];
 
-  const legendColors = useMemo(
-    () =>
-      trendMonths.map((_, idx) =>
-        idx === latestIndex
-          ? highlightColor
-          : NEUTRAL_BAR_COLORS[idx] ??
-            NEUTRAL_BAR_COLORS[NEUTRAL_BAR_COLORS.length - 1],
-      ),
-    [trendMonths, latestIndex, highlightColor],
-  );
+  // Daily avg transformation for trend series
+  const displayTrendSeries = useMemo(() => {
+    if (!isDaily || !trendMonths.length) return sortedTrendSeries;
+    return sortedTrendSeries.map((series) => ({
+      ...series,
+      values: series.values.map((v, i) => v / daysInMonth(trendMonths[i])),
+    }));
+  }, [sortedTrendSeries, isDaily, trendMonths]);
 
   // platform mix：依列分 chunk（每列最多 13 間店）
   const chunkedPlatformShare = useMemo(() => {
@@ -655,10 +771,9 @@ export const PlatformMatrix: React.FC<Props> = ({
             </tbody>
           </table>
 
-          {/* 近三個月門店長條圖（多列、無 y 軸線，0 值不畫 bar） */}
+          {/* 近六個月門店折線圖 grid */}
           {trendMonths.length > 0 &&
-            sortedTrendSeries.length > 0 &&
-            maxTrendValue > 0 && (
+            displayTrendSeries.length > 0 && (
               <>
                 <div
                   style={{
@@ -668,7 +783,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                   }}
                 />
 
-                {/* 標題 + 副標題 + 右上角 Legend */}
+                {/* Section header */}
                 <div
                   style={{
                     marginBottom: 8,
@@ -688,177 +803,41 @@ export const PlatformMatrix: React.FC<Props> = ({
                       }}
                     >
                       {isZh
-                        ? '近三個月門店營收趨勢'
-                        : '3-month store revenue trend'}
+                        ? isDaily
+                          ? '近六個月門店日均營收趨勢'
+                          : '近六個月門店營收趨勢'
+                        : isDaily
+                          ? '6-month store daily avg revenue trend'
+                          : '6-month store revenue trend'}
                     </div>
                     <div style={{ fontSize: 11, color: '#9ca3af' }}>
                       {isZh ? '平台：' : 'Platform: '}
                       {platformLabel(platformFilter, isZh)}
+                      {isDaily && (isZh ? ' · 日均' : ' · Daily Avg')}
                     </div>
                   </div>
 
-                  {/* Legend 靠右上 */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 12,
-                      fontSize: 10,
-                      color: '#9ca3af',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    {trendMonths.map((m, idx) => (
-                      <div
-                        key={m}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 9999,
-                            backgroundColor: legendColors[idx],
-                          }}
-                        />
-                        <span>{monthLabel(m, language)}</span>
-                      </div>
-                    ))}
+                  <div style={{ fontSize: 10, color: '#6b7280' }}>
+                    {monthLabel(trendMonths[0], language)}
+                    {' — '}
+                    {monthLabel(trendMonths[trendMonths.length - 1], language)}
                   </div>
                 </div>
 
-                {chunkedTrendSeries.map((rowSeries, rowIndex) => (
-                  <div
-                    key={rowIndex}
-                    style={{
-                      position: 'relative',
-                      height: 210,
-                      padding: '10px 0 12px',
-                      overflowX: 'auto',
-                      borderTop:
-                        rowIndex > 0 ? '1px dashed #111827' : undefined,
-                      marginTop: rowIndex > 0 ? 8 : 0,
-                    }}
-                  >
-                    {/* 只保留 bars + 店名，不畫任何 y 軸線與 label */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-end',
-                        gap: 12,
-                        height: '100%',
-                        paddingRight: 8,
-                        paddingLeft: 24, // 整排柱狀圖往右移一點
-                      }}
-                    >
-                      {/* bar groups：這一列的門店 */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'flex-end',
-                          gap: 20,
-                          height: '100%',
-                        }}
-                      >
-                        {rowSeries.map((series) => (
-                          <div
-                            key={`${series.region}-${series.store_name}`}
-                            style={{
-                              minWidth: 56,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'flex-end',
-                            }}
-                          >
-                            {/* 三個月份的 bars */}
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'flex-end',
-                                gap: 6,
-                                height: 160,
-                              }}
-                            >
-                              {series.values.map((rawV, idx) => {
-                                const v = Number(rawV || 0);
-
-                                // 沒有數值就留白
-                                if (!v || v <= 0) {
-                                  return (
-                                    <div
-                                      key={idx}
-                                      style={{ width: 10, height: 0 }}
-                                    />
-                                  );
-                                }
-
-                                const ratio =
-                                  maxTrendValue > 0 ? v / maxTrendValue : 0;
-                                const height = ratio * 150;
-                                const isLatest = idx === latestIndex;
-                                const rounded = Math.round(v);
-
-                                const barColor = isLatest
-                                  ? highlightColor
-                                  : NEUTRAL_BAR_COLORS[idx] ??
-                                    NEUTRAL_BAR_COLORS[
-                                      NEUTRAL_BAR_COLORS.length - 1
-                                    ];
-
-                                return (
-                                  <div
-                                    key={idx}
-                                    style={{
-                                      position: 'relative',
-                                      width: 10,
-                                      borderRadius: 0, // 長方形
-                                      backgroundColor: barColor,
-                                      height,
-                                    }}
-                                  >
-                                    {isLatest && (
-                                      <span
-                                        style={{
-                                          position: 'absolute',
-                                          bottom: height + 10, // 再往上拉一點，讓 COO 更好讀
-                                          left: '50%',
-                                          transform: 'translateX(-50%)',
-                                          fontSize: 9,
-                                          color: '#e5e7eb',
-                                          whiteSpace: 'nowrap',
-                                        }}
-                                      >
-                                        {rounded === 0
-                                          ? '0'
-                                          : rounded.toLocaleString()}
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {/* 店名固定在 bars 下方 */}
-                            <div
-                              style={{
-                                marginTop: 8,
-                                fontSize: 10,
-                                color: '#9ca3af',
-                                textAlign: 'center',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {series.store_name}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                {/* Grid of mini line charts */}
+                <div className="store-trend-grid">
+                  {displayTrendSeries.map((series) => (
+                    <StoreLineChart
+                      key={`${series.region}-${series.store_name}`}
+                      storeName={series.store_name}
+                      values={series.values}
+                      months={trendMonths}
+                      lineColor={highlightColor}
+                      language={language}
+                      valueFormatter={formatCurrency}
+                    />
+                  ))}
+                </div>
 
                 {/* === Current-month platform mix by store（下方堆疊圖） === */}
                {chunkedPlatformShare.length > 0 && (
