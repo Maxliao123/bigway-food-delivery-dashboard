@@ -99,6 +99,25 @@ const PLATFORM_OPTIONS: {
   { value: 'Doordash', labelEn: 'Doordash', labelZh: 'Doordash' },
 ];
 
+type ViewMode = 'monthly' | 'daily';
+
+const VIEW_MODE_OPTIONS: { value: ViewMode; labelEn: string; labelZh: string }[] = [
+  { value: 'monthly', labelEn: 'Monthly', labelZh: '月總計' },
+  { value: 'daily', labelEn: 'Daily Avg', labelZh: '日均' },
+];
+
+function daysInMonth(monthIso: string | null): number {
+  if (!monthIso) return 30;
+  const d = new Date(monthIso);
+  if (Number.isNaN(d.getTime())) return 30;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+}
+
+function calcMomFromValues(curr: number, prev: number | null): number | null {
+  if (prev === null || prev === 0) return null;
+  return (curr - prev) / prev;
+}
+
 const platformLabel = (value: MatrixPlatformFilter, isZh: boolean) => {
   switch (value) {
     case 'ALL':
@@ -131,6 +150,7 @@ export const PlatformMatrix: React.FC<Props> = ({
 }) => {
   const [platformFilter, setPlatformFilter] =
     useState<MatrixPlatformFilter>('ALL');
+  const [viewMode, setViewMode] = useState<ViewMode>('monthly');
 
   const {
     loading,
@@ -196,6 +216,34 @@ export const PlatformMatrix: React.FC<Props> = ({
     });
     return copy;
   }, [rows, sort]);
+
+  // Daily average transformation
+  const isDaily = viewMode === 'daily';
+  const daysCurr = daysInMonth(currentMonth);
+  const daysPrev = daysInMonth(prevMonth);
+
+  const displayRows = useMemo(() => {
+    if (!isDaily) return sortedRows;
+    return sortedRows.map((row) => {
+      const dailyRevCurr = row.revenueCurrent / daysCurr;
+      const dailyRevPrev =
+        row.revenuePrev != null ? row.revenuePrev / daysPrev : null;
+      const dailyOrdCurr = row.ordersCurrent / daysCurr;
+      const dailyOrdPrev =
+        row.ordersPrev != null ? row.ordersPrev / daysPrev : null;
+
+      return {
+        ...row,
+        revenueCurrent: dailyRevCurr,
+        revenuePrev: dailyRevPrev,
+        revenueMom: calcMomFromValues(dailyRevCurr, dailyRevPrev),
+        ordersCurrent: dailyOrdCurr,
+        ordersPrev: dailyOrdPrev,
+        ordersMom: calcMomFromValues(dailyOrdCurr, dailyOrdPrev),
+        // AOV doesn't change (revenue/orders, days cancel out)
+      };
+    });
+  }, [sortedRows, isDaily, daysCurr, daysPrev]);
 
   const renderSortArrow = (key: SortKey) => {
     if (sort.key !== key) return ' ↕';
@@ -336,6 +384,44 @@ export const PlatformMatrix: React.FC<Props> = ({
               );
             })}
           </div>
+
+          {/* View Mode toggle */}
+          <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>
+            {isZh ? '顯示：' : 'View:'}
+          </span>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: 2,
+              borderRadius: 9999,
+              border: '1px solid #374151',
+              background: '#020617',
+            }}
+          >
+            {VIEW_MODE_OPTIONS.map((opt) => {
+              const active = viewMode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setViewMode(opt.value)}
+                  style={{
+                    border: 'none',
+                    borderRadius: 9999,
+                    padding: '2px 8px',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    background: active ? '#1f2937' : 'transparent',
+                    color: active ? '#f9fafb' : '#9ca3af',
+                    transition: 'background 0.15s ease, color 0.15s ease',
+                  }}
+                >
+                  {isZh ? opt.labelZh : opt.labelEn}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -387,6 +473,13 @@ export const PlatformMatrix: React.FC<Props> = ({
                   ? ` · 前一月：${prevMonth}`
                   : ` · Prev: ${prevMonth}`
                 : ''}
+              {isDaily && currentMonth && (
+                <>
+                  {' · '}
+                  {daysCurr}d
+                  {prevMonth ? ` / ${daysPrev}d` : ''}
+                </>
+              )}
             </span>
           </div>
 
@@ -422,7 +515,9 @@ export const PlatformMatrix: React.FC<Props> = ({
                   }}
                   onClick={() => handleSort('revenueCurrent')}
                 >
-                  {isZh ? '當月營收' : 'Curr revenue'}
+                  {isDaily
+                    ? isZh ? '日均營收' : 'Daily Avg Rev'
+                    : isZh ? '當月營收' : 'Curr revenue'}
                   {renderSortArrow('revenueCurrent')}
                 </th>
                 <th
@@ -433,7 +528,9 @@ export const PlatformMatrix: React.FC<Props> = ({
                   }}
                   onClick={() => handleSort('revenuePrev')}
                 >
-                  {isZh ? '前一月營收' : 'Prev revenue'}
+                  {isDaily
+                    ? isZh ? '前月日均' : 'Prev Daily Rev'
+                    : isZh ? '前一月營收' : 'Prev revenue'}
                   {renderSortArrow('revenuePrev')}
                 </th>
                 <th
@@ -457,7 +554,9 @@ export const PlatformMatrix: React.FC<Props> = ({
                   }}
                   onClick={() => handleSort('ordersCurrent')}
                 >
-                  {isZh ? '當月單量' : 'Curr orders'}
+                  {isDaily
+                    ? isZh ? '日均單量' : 'Daily Avg Orders'
+                    : isZh ? '當月單量' : 'Curr orders'}
                   {renderSortArrow('ordersCurrent')}
                 </th>
                 <th
@@ -498,7 +597,7 @@ export const PlatformMatrix: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map((row) => (
+              {displayRows.map((row) => (
                 <tr
                   key={`${row.region}-${row.store_name}`}
                   style={{ borderBottom: '1px solid #111827' }}
