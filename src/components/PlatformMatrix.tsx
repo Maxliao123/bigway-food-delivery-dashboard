@@ -254,6 +254,7 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
                 strokeWidth={1}
               />
               <text
+                className="store-trend-value-label"
                 x={x}
                 y={Math.max(margin.top + 4, labelY)}
                 textAnchor="middle"
@@ -270,6 +271,7 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
         {/* X-axis month labels */}
         {months.map((m, i) => (
           <text
+            className="store-trend-month-label"
             key={m}
             x={getX(i)}
             y={height - 4}

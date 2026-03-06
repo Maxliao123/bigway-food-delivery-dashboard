@@ -636,11 +636,29 @@ body {
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(55, 65, 81, 0.6);
-  transition: border-color 0.15s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transform-origin: center center;
 }
 
 .store-trend-card:hover {
   border-color: rgba(148, 163, 184, 0.5);
+  transform: scale(1.045);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+  position: relative;
+}
+
+.store-trend-value-label,
+.store-trend-month-label {
+  transition: font-size 0.2s ease;
+}
+
+.store-trend-card:hover .store-trend-value-label {
+  font-size: 7.5px;
+}
+
+.store-trend-card:hover .store-trend-month-label {
+  font-size: 7px;
 }
 
 .store-trend-card-header {
