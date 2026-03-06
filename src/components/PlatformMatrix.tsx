@@ -179,8 +179,8 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
     domainMax += pad;
   } else {
     const span = domainMax - domainMin;
-    domainMin -= span * 0.15;
-    domainMax += span * 0.25; // more top padding for labels
+    domainMin -= span * 0.25; // bottom padding for below-labels
+    domainMax += span * 0.25; // top padding for above-labels
   }
   if (domainMax <= domainMin) domainMax = domainMin + 1;
 
@@ -238,11 +238,33 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
           strokeLinejoin="round"
         />
 
-        {/* Dots + value labels */}
+        {/* Dots + value labels (smart placement: above or below dot) */}
         {values.map((v, i) => {
           const x = getX(i);
           const y = getY(v);
-          const labelY = y - 9;
+
+          // Decide label above or below based on neighboring points.
+          // If neighbors are generally lower on screen (higher value) → this is a valley → label below.
+          // If neighbors are generally higher on screen (lower value) → this is a peak → label above.
+          const prevY = i > 0 ? getY(values[i - 1]) : y;
+          const nextY = i < values.length - 1 ? getY(values[i + 1]) : y;
+          const avgNeighborY = (prevY + nextY) / 2;
+          // avgNeighborY < y means neighbors are above (peak) → put label above
+          // avgNeighborY >= y means neighbors are below (valley) → put label below
+          const placeBelow = avgNeighborY < y - 2;
+
+          const labelOffset = 10;
+          let labelY: number;
+          if (placeBelow) {
+            labelY = y + labelOffset + 6;
+            // Clamp so label doesn't go below chart bottom
+            labelY = Math.min(labelY, margin.top + chartH - 2);
+          } else {
+            labelY = y - labelOffset;
+            // Clamp so label doesn't go above chart top
+            labelY = Math.max(labelY, margin.top + 5);
+          }
+
           return (
             <g key={i}>
               <circle
@@ -256,7 +278,7 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
               <text
                 className="store-trend-value-label"
                 x={x}
-                y={Math.max(margin.top + 5, labelY)}
+                y={labelY}
                 textAnchor="middle"
                 fontSize={7}
                 fill="rgba(229,231,235,0.9)"
