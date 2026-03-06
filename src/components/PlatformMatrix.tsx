@@ -156,9 +156,9 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
   language,
   valueFormatter,
 }) => {
-  const width = 340;
-  const height = 150;
-  const margin = { top: 22, right: 14, bottom: 24, left: 10 };
+  const width = 420;
+  const height = 160;
+  const margin = { top: 24, right: 16, bottom: 26, left: 12 };
   const chartW = width - margin.left - margin.right;
   const chartH = height - margin.top - margin.bottom;
 
@@ -233,7 +233,7 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
           d={pathD}
           fill="none"
           stroke={lineColor}
-          strokeWidth={2}
+          strokeWidth={2.2}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -242,13 +242,13 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
         {values.map((v, i) => {
           const x = getX(i);
           const y = getY(v);
-          const labelY = y - 8;
+          const labelY = y - 9;
           return (
             <g key={i}>
               <circle
                 cx={x}
                 cy={y}
-                r={3}
+                r={3.5}
                 fill={lineColor}
                 stroke="#020617"
                 strokeWidth={1}
@@ -256,9 +256,9 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
               <text
                 className="store-trend-value-label"
                 x={x}
-                y={Math.max(margin.top + 4, labelY)}
+                y={Math.max(margin.top + 5, labelY)}
                 textAnchor="middle"
-                fontSize={6}
+                fontSize={7}
                 fill="rgba(229,231,235,0.9)"
                 fontWeight={500}
               >
@@ -276,7 +276,7 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
             x={getX(i)}
             y={height - 4}
             textAnchor="middle"
-            fontSize={5.5}
+            fontSize={6.5}
             fill="rgba(255,255,255,0.5)"
           >
             {fmtMonth(m)}
