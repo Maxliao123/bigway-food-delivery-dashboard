@@ -159,7 +159,7 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
 }) => {
   const width = 420;
   const height = 160;
-  const margin = { top: 24, right: 16, bottom: 26, left: 12 };
+  const margin = { top: 24, right: 16, bottom: 26, left: 28 };
   const chartW = width - margin.left - margin.right;
   const chartH = height - margin.top - margin.bottom;
 
@@ -297,7 +297,7 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
                 fill="rgba(229,231,235,0.9)"
                 fontWeight={500}
               >
-                {valueFormatter(v)}
+                {valueFormatter(v).replace('$', '')}
               </text>
             </g>
           );
