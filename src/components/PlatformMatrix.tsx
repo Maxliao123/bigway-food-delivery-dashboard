@@ -857,8 +857,7 @@ export const PlatformMatrix: React.FC<Props> = ({
                     return (
                       <div
                         key={key}
-                        onMouseEnter={() => setHoveredStoreKey(key)}
-                        onMouseLeave={() => setHoveredStoreKey(null)}
+                        onClick={() => setHoveredStoreKey(key)}
                       >
                         <StoreLineChart
                           storeName={series.store_name}
@@ -883,11 +882,10 @@ export const PlatformMatrix: React.FC<Props> = ({
                     <>
                       <div
                         className="store-trend-overlay-backdrop"
-                        onMouseEnter={() => setHoveredStoreKey(null)}
+                        onClick={() => setHoveredStoreKey(null)}
                       />
                       <div
                         className="store-trend-overlay-card"
-                        onMouseLeave={() => setHoveredStoreKey(null)}
                       >
                         <StoreLineChart
                           storeName={s.store_name}
