@@ -614,31 +614,25 @@ body {
 
 .store-trend-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
   margin-top: 8px;
 }
 
-@media (max-width: 1200px) {
-  .store-trend-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 900px) {
+@media (max-width: 1000px) {
   .store-trend-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 600px) {
   .store-trend-grid {
     grid-template-columns: 1fr;
   }
 }
 
 .store-trend-card {
-  padding: 10px 12px 8px;
+  padding: 12px 14px 10px;
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(55, 65, 81, 0.6);
@@ -653,11 +647,11 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .store-trend-card-name {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: #e5e7eb;
   white-space: nowrap;
@@ -667,7 +661,7 @@ body {
 }
 
 .store-trend-card-latest {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: #e5e7eb;
   font-variant-numeric: tabular-nums;

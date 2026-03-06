@@ -156,9 +156,9 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
   language,
   valueFormatter,
 }) => {
-  const width = 300;
-  const height = 120;
-  const margin = { top: 18, right: 12, bottom: 20, left: 8 };
+  const width = 340;
+  const height = 150;
+  const margin = { top: 22, right: 14, bottom: 24, left: 10 };
   const chartW = width - margin.left - margin.right;
   const chartH = height - margin.top - margin.bottom;
 
@@ -233,7 +233,7 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
           d={pathD}
           fill="none"
           stroke={lineColor}
-          strokeWidth={1.8}
+          strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -242,23 +242,24 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
         {values.map((v, i) => {
           const x = getX(i);
           const y = getY(v);
-          const labelY = y - 6;
+          const labelY = y - 8;
           return (
             <g key={i}>
               <circle
                 cx={x}
                 cy={y}
-                r={2.5}
+                r={3}
                 fill={lineColor}
                 stroke="#020617"
-                strokeWidth={0.8}
+                strokeWidth={1}
               />
               <text
                 x={x}
-                y={Math.max(margin.top + 2, labelY)}
+                y={Math.max(margin.top + 4, labelY)}
                 textAnchor="middle"
-                fontSize={4.5}
-                fill="rgba(229,231,235,0.85)"
+                fontSize={6}
+                fill="rgba(229,231,235,0.9)"
+                fontWeight={500}
               >
                 {valueFormatter(v)}
               </text>
@@ -273,8 +274,8 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
             x={getX(i)}
             y={height - 4}
             textAnchor="middle"
-            fontSize={3.8}
-            fill="rgba(255,255,255,0.45)"
+            fontSize={5.5}
+            fill="rgba(255,255,255,0.5)"
           >
             {fmtMonth(m)}
           </text>
