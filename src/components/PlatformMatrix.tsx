@@ -53,7 +53,7 @@ function momCellStyle(mom: number | null): React.CSSProperties {
 
 // 各平台折線色
 const PLATFORM_BAR_HIGHLIGHT: Record<MatrixPlatformFilter, string> = {
-  ALL: '#f97316', // 橘
+  ALL: '#ffffff', // 白
   UBER: '#3b82f6', // 藍
   Fantuan: '#22c55e', // 綠
   Doordash: '#eab308', // 黃
@@ -166,9 +166,9 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
   const hasData = values.some((v) => v > 0);
   if (!hasData) return null;
 
-  // Y domain with padding
+  // Y domain with padding — only consider non-zero values (0 = store not yet open)
   const positiveValues = values.filter((v) => v > 0);
-  const maxV = Math.max(...values);
+  const maxV = positiveValues.length > 0 ? Math.max(...positiveValues) : 0;
   const minV = positiveValues.length > 0 ? Math.min(...positiveValues) : 0;
 
   let domainMin = minV;
@@ -194,10 +194,17 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
     return margin.top + chartH - ratio * chartH;
   };
 
-  // Build path
-  const pathD = values
-    .map((v, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(v)}`)
-    .join(' ');
+  // Build path segments — break at zero values (store not yet open)
+  const pathSegments: string[] = [];
+  let seg = '';
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] === 0) {
+      if (seg) { pathSegments.push(seg); seg = ''; }
+      continue;
+    }
+    seg += `${seg === '' ? 'M' : ' L'} ${getX(i)} ${getY(values[i])}`;
+  }
+  if (seg) pathSegments.push(seg);
 
   // Short month labels
   const fmtMonth = (iso: string) => {
@@ -208,7 +215,11 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
     });
   };
 
-  const latestValue = values[values.length - 1];
+  // Show latest non-zero value in card header
+  let latestValue = 0;
+  for (let i = values.length - 1; i >= 0; i--) {
+    if (values[i] > 0) { latestValue = values[i]; break; }
+  }
 
   return (
     <div className="store-trend-card">
@@ -229,40 +240,41 @@ const StoreLineChart: React.FC<StoreLineChartProps> = ({
           strokeWidth={0.5}
         />
 
-        {/* Line path */}
-        <path
-          d={pathD}
-          fill="none"
-          stroke={lineColor}
-          strokeWidth={2.2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {/* Line path segments (breaks at zero-value months) */}
+        {pathSegments.map((seg, si) => (
+          <path
+            key={si}
+            d={seg}
+            fill="none"
+            stroke={lineColor}
+            strokeWidth={2.2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
 
-        {/* Dots + value labels (smart placement: above or below dot) */}
+        {/* Dots + value labels — skip zero months (store not yet open) */}
         {values.map((v, i) => {
+          if (v === 0) return null; // skip: store not open yet
+
           const x = getX(i);
           const y = getY(v);
 
-          // Decide label above or below based on neighboring points.
-          // If neighbors are generally lower on screen (higher value) → this is a valley → label below.
-          // If neighbors are generally higher on screen (lower value) → this is a peak → label above.
-          const prevY = i > 0 ? getY(values[i - 1]) : y;
-          const nextY = i < values.length - 1 ? getY(values[i + 1]) : y;
+          // Smart label placement: compare with non-zero neighbors
+          const prevIdx = values.slice(0, i).findLastIndex((val) => val > 0);
+          const nextIdx = values.findIndex((val, j) => j > i && val > 0);
+          const prevY = prevIdx >= 0 ? getY(values[prevIdx]) : y;
+          const nextY = nextIdx >= 0 ? getY(values[nextIdx]) : y;
           const avgNeighborY = (prevY + nextY) / 2;
-          // avgNeighborY < y means neighbors are above (peak) → put label above
-          // avgNeighborY >= y means neighbors are below (valley) → put label below
           const placeBelow = avgNeighborY < y - 2;
 
           const labelOffset = 10;
           let labelY: number;
           if (placeBelow) {
             labelY = y + labelOffset + 6;
-            // Clamp so label doesn't go below chart bottom
             labelY = Math.min(labelY, margin.top + chartH - 2);
           } else {
             labelY = y - labelOffset;
-            // Clamp so label doesn't go above chart top
             labelY = Math.max(labelY, margin.top + 5);
           }
 

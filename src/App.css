@@ -688,6 +688,11 @@ body {
   font-weight: 700;
 }
 
+.store-trend-overlay-card .store-trend-value-label {
+  font-weight: 700 !important;
+  fill: rgba(229, 231, 235, 1) !important;
+}
+
 .store-trend-card-header {
   display: flex;
   justify-content: space-between;
