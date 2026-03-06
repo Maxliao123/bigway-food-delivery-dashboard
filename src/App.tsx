@@ -4,6 +4,7 @@ import './App.css';
 import { useDashboardData } from './hooks/useDashboardData';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PlatformMatrix } from './components/PlatformMatrix';
+import { UberAdsSection } from './components/UberAdsSection';
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './components/LoginPage';
 
@@ -241,6 +242,15 @@ function App() {
               {/* 2️⃣ Platform Velocity Matrix */}
               <section className="section-card">
                 <PlatformMatrix
+                  language={language}
+                  selectedRegion={selectedRegion}
+                  selectedMonth={selectedMonth}
+                />
+              </section>
+
+              {/* 3️⃣ Uber Ads Performance */}
+              <section className="section-card">
+                <UberAdsSection
                   language={language}
                   selectedRegion={selectedRegion}
                   selectedMonth={selectedMonth}
