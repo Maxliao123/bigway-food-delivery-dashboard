@@ -1,5 +1,6 @@
 // src/components/PlatformMatrix.tsx
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   usePlatformMatrix,
   type MatrixPlatformFilter,
@@ -872,13 +873,13 @@ export const PlatformMatrix: React.FC<Props> = ({
                   })}
                 </div>
 
-                {/* Overlay: enlarged card centered on screen */}
+                {/* Overlay: portal to body so it escapes overflow/stacking contexts */}
                 {hoveredStoreKey != null && (() => {
                   const s = displayTrendSeries.find(
                     (ss) => `${ss.region}-${ss.store_name}` === hoveredStoreKey,
                   );
                   if (!s) return null;
-                  return (
+                  return createPortal(
                     <>
                       <div
                         className="store-trend-overlay-backdrop"
@@ -896,7 +897,8 @@ export const PlatformMatrix: React.FC<Props> = ({
                           valueFormatter={formatCurrency}
                         />
                       </div>
-                    </>
+                    </>,
+                    document.body,
                   );
                 })()}
 
