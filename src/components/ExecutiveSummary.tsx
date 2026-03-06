@@ -614,6 +614,9 @@ export const ExecutiveSummary: React.FC<Props> = ({
     return rows;
   }, [breakdownRows, sortKey, sortDir]);
 
+  const daysCurr = daysInMonth(selectedMonth);
+  const daysPrev = daysInMonth(prevMonthSelection);
+
   // Daily average transformation for breakdown table
   const displayBreakdownRows = useMemo(() => {
     if (!isDaily || activeMetric === 'aov') return sortedBreakdownRows;
@@ -726,9 +729,6 @@ export const ExecutiveSummary: React.FC<Props> = ({
   const cardTitle = isDaily
     ? isZh ? platformTitleMap[activeMetric].zhDaily : platformTitleMap[activeMetric].enDaily
     : isZh ? platformTitleMap[activeMetric].zh : platformTitleMap[activeMetric].en;
-
-  const daysCurr = daysInMonth(selectedMonth);
-  const daysPrev = daysInMonth(prevMonthSelection);
 
   // Daily-adjusted KPIs
   const effectiveRevenueKpi = useMemo(() => {
