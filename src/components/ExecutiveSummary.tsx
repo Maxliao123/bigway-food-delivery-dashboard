@@ -33,6 +33,8 @@ type Props = {
   platformAovKpis?: PlatformKpi[];
   allMonths: string[];
   rawRows: SalesRow[];
+  totalBusinessRevenue?: number | null;
+  totalBusinessRevenueLoading?: boolean;
 };
 
 type MetricKey = 'revenue' | 'orders' | 'aov';
@@ -334,6 +336,8 @@ export const ExecutiveSummary: React.FC<Props> = ({
   regionalAovKpis,
   allMonths,
   rawRows,
+  totalBusinessRevenue,
+  totalBusinessRevenueLoading,
 }) => {
   const [activeMetric, setActiveMetric] = useState<MetricKey>('revenue');
   const [sortKey, setSortKey] = useState<SortKey>('current');
@@ -672,6 +676,18 @@ export const ExecutiveSummary: React.FC<Props> = ({
   const effectiveOrdersKpi = cardKpis.orders;
   const effectiveAovKpi = cardKpis.aov;
 
+  // Delivery revenue share = delivery revenue / total business revenue
+  const deliveryShare = useMemo(() => {
+    if (
+      totalBusinessRevenue == null ||
+      totalBusinessRevenue <= 0 ||
+      effectiveRevenueKpi.current <= 0
+    ) {
+      return null;
+    }
+    return effectiveRevenueKpi.current / totalBusinessRevenue;
+  }, [effectiveRevenueKpi.current, totalBusinessRevenue]);
+
   return (
     <div className="exec-wrapper">
       {/* 範圍標籤 */}
@@ -699,20 +715,51 @@ export const ExecutiveSummary: React.FC<Props> = ({
       {/* KPI cards */}
       <div className="kpi-grid">
         <div className="kpi-card" onClick={() => setActiveMetric('revenue')}>
-          <div className="kpi-title">
-            {isZh
-              ? metricConfig.revenue.labelZh
-              : metricConfig.revenue.labelEn}
-          </div>
-          <div className="kpi-value">
-            {formatCurrency(effectiveRevenueKpi.current)}
-          </div>
-          <div className="kpi-sub">
-            {isZh ? '對比' : 'vs'} {periodInfo.previousLabel}
-            {' · '}
-            <span className={getDeltaClass(effectiveRevenueKpi.mom)}>
-              {formatPercent(effectiveRevenueKpi.mom)}
-            </span>
+          <div className="kpi-card-inner">
+            <div className="kpi-card-main">
+              <div className="kpi-title">
+                {isZh
+                  ? metricConfig.revenue.labelZh
+                  : metricConfig.revenue.labelEn}
+              </div>
+              <div className="kpi-value">
+                {formatCurrency(effectiveRevenueKpi.current)}
+              </div>
+              <div className="kpi-sub">
+                {isZh ? '對比' : 'vs'} {periodInfo.previousLabel}
+                {' · '}
+                <span className={getDeltaClass(effectiveRevenueKpi.mom)}>
+                  {formatPercent(effectiveRevenueKpi.mom)}
+                </span>
+              </div>
+            </div>
+
+            {deliveryShare != null && (
+              <div className="kpi-delivery-share">
+                <div className="kpi-delivery-share-pct">
+                  {(deliveryShare * 100).toFixed(1).replace(/\.0$/, '')}%
+                </div>
+                <div className="kpi-delivery-share-label">
+                  {isZh ? '外送占比' : 'Delivery %'}
+                </div>
+                <div className="kpi-delivery-share-total">
+                  {isZh ? '整體營收' : 'Total Biz Rev.'}
+                  {': '}
+                  {formatCurrency(totalBusinessRevenue ?? null)}
+                </div>
+              </div>
+            )}
+
+            {deliveryShare == null && !totalBusinessRevenueLoading && (
+              <div className="kpi-delivery-share kpi-delivery-share-empty">
+                <div className="kpi-delivery-share-label">
+                  {isZh ? '外送占比' : 'Delivery %'}
+                </div>
+                <div style={{ fontSize: 10, color: '#6b7280' }}>
+                  {isZh ? '暫無數據' : 'No data'}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

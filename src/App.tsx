@@ -5,6 +5,7 @@ import { useDashboardData } from './hooks/useDashboardData';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PlatformMatrix } from './components/PlatformMatrix';
 import { UberAdsPanel } from './components/UberAdsPanel';
+import { useTotalRevenue } from './hooks/useTotalRevenue';
 
 // ⭐ Supabase Auth
 import type { Session } from '@supabase/supabase-js';
@@ -59,6 +60,11 @@ function App() {
     allMonths,
     rawRows,
   } = useDashboardData(selectedMonth ?? undefined, selectedRegion);
+
+  const {
+    loading: totalRevenueLoading,
+    totalRevenue: totalBusinessRevenue,
+  } = useTotalRevenue(selectedRegion, selectedMonth);
 
   const [language, setLanguage] = useState<Lang>('en');
   const isZh = language === 'zh';
@@ -518,6 +524,8 @@ const prevSelectableMonth = useMemo(() => {
                   platformAovKpis={platformAovKpis}
                   allMonths={allMonths}
                   rawRows={rawRows}
+                  totalBusinessRevenue={totalBusinessRevenue}
+                  totalBusinessRevenueLoading={totalRevenueLoading}
                 />
               </section>
 

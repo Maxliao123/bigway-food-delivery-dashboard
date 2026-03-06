@@ -328,6 +328,78 @@ body {
   color: #f97373;
 }
 
+/* ===== Delivery share indicator inside Revenue card ===== */
+
+.kpi-card-inner {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.kpi-card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.kpi-delivery-share {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: radial-gradient(
+    circle at center,
+    rgba(37, 99, 235, 0.15),
+    rgba(15, 23, 42, 0.6)
+  );
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  text-align: center;
+}
+
+.kpi-delivery-share-pct {
+  font-size: 22px;
+  font-weight: 700;
+  background: linear-gradient(120deg, #60a5fa, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1.1;
+}
+
+.kpi-delivery-share-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #93c5fd;
+  margin-top: 2px;
+}
+
+.kpi-delivery-share-total {
+  font-size: 10px;
+  color: #6b7280;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.kpi-delivery-share-empty {
+  opacity: 0.5;
+}
+
+@media (max-width: 900px) {
+  .kpi-card-inner {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .kpi-delivery-share {
+    flex-direction: row;
+    gap: 8px;
+    min-width: unset;
+    padding: 6px 12px;
+  }
+}
+
 /* ===== Region / Platform breakdown block ===== */
 
 .region-card {
