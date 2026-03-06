@@ -62,6 +62,12 @@ function formatPercentSimple(value: number | null | undefined): string {
   return `${pct.replace(/\.0$/, '')}%`;
 }
 
+function formatRoasDelta(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}`;
+}
+
 function getDeltaClass(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return '';
   if (value > 0) return 'kpi-pos';
@@ -193,7 +199,10 @@ export const UberAdsPanel: React.FC<Props> = ({
     const roasKpi: Kpi = {
       current: avgRoasCurr,
       previous: avgRoasPrev,
-      mom: calcMom(avgRoasCurr, avgRoasPrev),
+      mom:
+        avgRoasCurr != null && avgRoasPrev != null
+          ? avgRoasCurr - avgRoasPrev
+          : null,
     };
 
     return {
@@ -395,7 +404,7 @@ export const UberAdsPanel: React.FC<Props> = ({
               {isZh ? '對比' : 'vs'} {prevMonthText}
               {' · '}
               <span className={getDeltaClass(kpis.roas.mom)}>
-                {formatPercentSimple(kpis.roas.mom)}
+                {formatRoasDelta(kpis.roas.mom)}
               </span>
             </div>
           </div>
@@ -576,7 +585,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                       </button>
                     </th>
 
-                    {/* ROAS Δ% */}
+                    {/* ROAS Δ */}
                     <th
                       style={{
                         textAlign: 'right',
@@ -597,7 +606,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                           alignItems: 'center',
                         }}
                       >
-                        ROAS Δ%
+                        ROAS Δ
                         {renderSortIcon('roasDelta')}
                       </button>
                     </th>
@@ -633,7 +642,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                   {sortedRows.map((row) => {
                     const sales = calcSales(row);
                     const roasDelta = row.roas_delta_pct ?? null;
-                    const roasDeltaDisplay = formatPercentSimple(roasDelta);
+                    const roasDeltaDisplay = formatRoasDelta(roasDelta);
                     const roasDeltaClass = getDeltaClass(roasDelta);
 
                     return (
@@ -691,7 +700,7 @@ export const UberAdsPanel: React.FC<Props> = ({
                           {formatRoas(row.curr.roas)}
                         </td>
 
-                        {/* ROAS Δ% */}
+                        {/* ROAS Δ */}
                         <td
                           style={{
                             padding: '6px 4px',

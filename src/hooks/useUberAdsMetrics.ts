@@ -143,9 +143,8 @@ export function useUberAdsMetrics(
 
           const roas_delta_pct =
             currRoas != null &&
-            prevRoas != null &&
-            prevRoas !== 0
-              ? (currRoas - prevRoas) / prevRoas
+            prevRoas != null
+              ? currRoas - prevRoas
               : null;
 
           // 這裡照你的需求：Daily AD Spend = sales / 天數
