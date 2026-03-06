@@ -4,13 +4,27 @@ import './App.css';
 import { useDashboardData } from './hooks/useDashboardData';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PlatformMatrix } from './components/PlatformMatrix';
+import { useAuth } from './hooks/useAuth';
+import { LoginPage } from './components/LoginPage';
 
 export type Lang = 'en' | 'zh';
 export type Scope = 'BC' | 'ON' | 'CA';
 
 function App() {
+  const auth = useAuth();
+
+  // --- Determine allowed regions based on user role ---
+  const allowedRegions: Scope[] = useMemo(() => {
+    if (!auth.authEnabled || auth.allowedRegion === 'ALL') {
+      return ['BC', 'ON', 'CA'];
+    }
+    return [auth.allowedRegion as Scope];
+  }, [auth.authEnabled, auth.allowedRegion]);
+
+  // --- All hooks must be called before any conditional return ---
   const [selectedRegion, setSelectedRegion] = useState<Scope>('BC');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [language, setLanguage] = useState<Lang>('en');
 
   const {
     loading,
@@ -29,16 +43,15 @@ function App() {
     allMonths,
     rawRows,
   } = useDashboardData(selectedMonth ?? undefined, selectedRegion);
-  const [language, setLanguage] = useState<Lang>('en');
+
   const isZh = language === 'zh';
 
-  const title = isZh ? 'Food Delivery 外送儀表板' : 'Food Delivery Intelligence';
-  const subtitle = isZh
-    ? 'BC / CA / ON 外送平台的整體表現總覽'
-    : 'Strategic dashboard for BC / CA / ON delivery performance.';
-  const metaText = isZh
-    ? '資料來源 · Supabase · 自動更新'
-    : 'Data source · Supabase · Auto-refreshed';
+  // Sync selectedRegion when allowed regions change (e.g. after login)
+  useEffect(() => {
+    if (!allowedRegions.includes(selectedRegion)) {
+      setSelectedRegion(allowedRegions[0]);
+    }
+  }, [allowedRegions, selectedRegion]);
 
   useEffect(() => {
     if (allMonths.length && !selectedMonth) {
@@ -53,16 +66,44 @@ function App() {
     return null;
   }, [allMonths, selectedMonth]);
 
-const monthLabel = (iso: string) => {
-  const short = iso.slice(0, 7); // "YYYY-MM"
-  const [year, month] = short.split('-');
-  const mNum = Number(month);
-  if (!year || !mNum || Number.isNaN(mNum)) return short;
+  // --- Auth gate (after all hooks) ---
+  if (auth.authEnabled && auth.loading) {
+    return (
+      <div className="app-root">
+        <div
+          className="status status-loading"
+          style={{ margin: '40vh auto', maxWidth: 300, textAlign: 'center' }}
+        >
+          Loading…
+        </div>
+      </div>
+    );
+  }
 
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${MONTHS[mNum - 1]} ${year}`;
-};
+  if (auth.authEnabled && !auth.session) {
+    return <LoginPage onLogin={auth.signIn} />;
+  }
+
+  const title = isZh ? 'Food Delivery 外送儀表板' : 'Food Delivery Intelligence';
+  const subtitle = isZh
+    ? 'BC / CA / ON 外送平台的整體表現總覽'
+    : 'Strategic dashboard for BC / CA / ON delivery performance.';
+  const metaText = isZh
+    ? '資料來源 · Supabase · 自動更新'
+    : 'Data source · Supabase · Auto-refreshed';
+
+  const monthLabel = (iso: string) => {
+    const short = iso.slice(0, 7); // "YYYY-MM"
+    const [year, month] = short.split('-');
+    const mNum = Number(month);
+    if (!year || !mNum || Number.isNaN(mNum)) return short;
+
+    const MONTHS = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return `${MONTHS[mNum - 1]} ${year}`;
+  };
 
   return (
     <div className="app-root">
@@ -98,6 +139,12 @@ const monthLabel = (iso: string) => {
                 中文
               </button>
             </div>
+
+            {auth.authEnabled && (
+              <button className="logout-button" onClick={auth.signOut}>
+                {isZh ? '登出' : 'Sign Out'}
+              </button>
+            )}
           </div>
         </header>
 
@@ -107,7 +154,7 @@ const monthLabel = (iso: string) => {
             <div className="filter-group">
               <span className="filter-label">{isZh ? '區域' : 'Region'}</span>
               <div className="scope-toggle">
-                {(['BC', 'ON', 'CA'] as Scope[]).map((region) => (
+                {allowedRegions.map((region) => (
                   <button
                     key={region}
                     type="button"
@@ -207,4 +254,3 @@ const monthLabel = (iso: string) => {
 }
 
 export default App;
-

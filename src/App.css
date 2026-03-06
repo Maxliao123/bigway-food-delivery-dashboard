@@ -192,6 +192,25 @@ body {
   color: #f9fafb;
 }
 
+/* ===== Logout button ===== */
+
+.logout-button {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  padding: 4px 12px;
+  font-size: 11px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #9ca3af;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.logout-button:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.6);
+}
+
 /* ===== Status states ===== */
 
 .status {
