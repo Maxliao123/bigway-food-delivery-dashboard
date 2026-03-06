@@ -628,18 +628,18 @@ body {
 .store-trend-card {
   padding: 14px 16px 12px;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.7);
+  background: #0b1222;
   border: 1px solid rgba(55, 65, 81, 0.6);
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   transform-origin: center center;
+  position: relative;
 }
 
 .store-trend-card:hover {
-  border-color: rgba(148, 163, 184, 0.5);
-  transform: scale(1.02);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-  z-index: 2;
-  position: relative;
+  border-color: rgba(148, 163, 184, 0.6);
+  transform: scale(1.5);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  z-index: 10;
 }
 
 .store-trend-card-header {
