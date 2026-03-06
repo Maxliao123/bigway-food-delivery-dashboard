@@ -317,6 +317,7 @@ export const PlatformMatrix: React.FC<Props> = ({
   const [platformFilter, setPlatformFilter] =
     useState<MatrixPlatformFilter>('ALL');
   const [viewMode, setViewMode] = useState<ViewMode>('monthly');
+  const [hoveredStoreKey, setHoveredStoreKey] = useState<string | null>(null);
 
   const {
     loading,
@@ -851,18 +852,55 @@ export const PlatformMatrix: React.FC<Props> = ({
 
                 {/* Grid of mini line charts */}
                 <div className="store-trend-grid">
-                  {displayTrendSeries.map((series) => (
-                    <StoreLineChart
-                      key={`${series.region}-${series.store_name}`}
-                      storeName={series.store_name}
-                      values={series.values}
-                      months={trendMonths}
-                      lineColor={highlightColor}
-                      language={language}
-                      valueFormatter={formatCurrency}
-                    />
-                  ))}
+                  {displayTrendSeries.map((series) => {
+                    const key = `${series.region}-${series.store_name}`;
+                    return (
+                      <div
+                        key={key}
+                        onMouseEnter={() => setHoveredStoreKey(key)}
+                        onMouseLeave={() => setHoveredStoreKey(null)}
+                      >
+                        <StoreLineChart
+                          storeName={series.store_name}
+                          values={series.values}
+                          months={trendMonths}
+                          lineColor={highlightColor}
+                          language={language}
+                          valueFormatter={formatCurrency}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* Overlay: enlarged card centered on screen */}
+                {hoveredStoreKey != null && (() => {
+                  const s = displayTrendSeries.find(
+                    (ss) => `${ss.region}-${ss.store_name}` === hoveredStoreKey,
+                  );
+                  if (!s) return null;
+                  return (
+                    <>
+                      <div
+                        className="store-trend-overlay-backdrop"
+                        onMouseEnter={() => setHoveredStoreKey(null)}
+                      />
+                      <div
+                        className="store-trend-overlay-card"
+                        onMouseLeave={() => setHoveredStoreKey(null)}
+                      >
+                        <StoreLineChart
+                          storeName={s.store_name}
+                          values={s.values}
+                          months={trendMonths}
+                          lineColor={highlightColor}
+                          language={language}
+                          valueFormatter={formatCurrency}
+                        />
+                      </div>
+                    </>
+                  );
+                })()}
 
                 {/* === Current-month platform mix by store（下方堆疊圖） === */}
                {chunkedPlatformShare.length > 0 && (
