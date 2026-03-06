@@ -768,19 +768,62 @@ export const ExecutiveSummary: React.FC<Props> = ({
       <div
         style={{
           display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 12,
           gap: 8,
           flexWrap: 'wrap',
         }}
       >
-        <span className="scope-pill scope-pill-active">{selectedRegion}</span>
-        <span className="scope-pill">{periodInfo.currentLabel}</span>
-        {prevMonthSelection && (
-          <span className="scope-pill" style={{ opacity: 0.9 }}>
-            {isZh ? '對比 ' : 'vs '} {monthLabel(prevMonthSelection)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="scope-pill scope-pill-active">{selectedRegion}</span>
+          <span className="scope-pill">{periodInfo.currentLabel}</span>
+          {prevMonthSelection && (
+            <span className="scope-pill" style={{ opacity: 0.9 }}>
+              {isZh ? '對比 ' : 'vs '} {monthLabel(prevMonthSelection)}
+            </span>
+          )}
+        </div>
+
+        {/* View Mode toggle — sits above AOV card */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
+            {isZh ? '顯示：' : 'View:'}
           </span>
-        )}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: 2,
+              borderRadius: 9999,
+              border: '1px solid #374151',
+              background: '#020617',
+            }}
+          >
+            {VIEW_MODE_OPTIONS.map((opt) => {
+              const active = viewMode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setViewMode(opt.value)}
+                  style={{
+                    border: 'none',
+                    borderRadius: 9999,
+                    padding: '2px 8px',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    background: active ? '#1f2937' : 'transparent',
+                    color: active ? '#f9fafb' : '#9ca3af',
+                    transition: 'background 0.15s ease, color 0.15s ease',
+                  }}
+                >
+                  {isZh ? opt.labelZh : opt.labelEn}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* KPI cards */}
@@ -883,76 +926,34 @@ export const ExecutiveSummary: React.FC<Props> = ({
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            {/* View Mode toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
-                {isZh ? '顯示：' : 'View:'}
-              </span>
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  padding: 2,
-                  borderRadius: 9999,
-                  border: '1px solid #374151',
-                  background: '#020617',
-                }}
-              >
-                {VIEW_MODE_OPTIONS.map((opt) => {
-                  const active = viewMode === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => setViewMode(opt.value)}
-                      style={{
-                        border: 'none',
-                        borderRadius: 9999,
-                        padding: '2px 8px',
-                        fontSize: 11,
-                        cursor: 'pointer',
-                        background: active ? '#1f2937' : 'transparent',
-                        color: active ? '#f9fafb' : '#9ca3af',
-                        transition: 'background 0.15s ease, color 0.15s ease',
-                      }}
-                    >
-                      {isZh ? opt.labelZh : opt.labelEn}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="metric-tabs">
-              <button
-                className={
-                  'metric-tab' +
-                  (activeMetric === 'revenue' ? ' metric-tab-active' : '')
-                }
-                onClick={() => setActiveMetric('revenue')}
-              >
-                {isZh ? '營收' : 'Revenue'}
-              </button>
-              <button
-                className={
-                  'metric-tab' +
-                  (activeMetric === 'orders' ? ' metric-tab-active' : '')
-                }
-                onClick={() => setActiveMetric('orders')}
-              >
-                {isZh ? '訂單' : 'Orders'}
-              </button>
-              <button
-                className={
-                  'metric-tab' +
-                  (activeMetric === 'aov' ? ' metric-tab-active' : '')
-                }
-                onClick={() => setActiveMetric('aov')}
-              >
-                {isZh ? '客單價' : 'AOV'}
-              </button>
-            </div>
+          <div className="metric-tabs">
+            <button
+              className={
+                'metric-tab' +
+                (activeMetric === 'revenue' ? ' metric-tab-active' : '')
+              }
+              onClick={() => setActiveMetric('revenue')}
+            >
+              {isZh ? '營收' : 'Revenue'}
+            </button>
+            <button
+              className={
+                'metric-tab' +
+                (activeMetric === 'orders' ? ' metric-tab-active' : '')
+              }
+              onClick={() => setActiveMetric('orders')}
+            >
+              {isZh ? '訂單' : 'Orders'}
+            </button>
+            <button
+              className={
+                'metric-tab' +
+                (activeMetric === 'aov' ? ' metric-tab-active' : '')
+              }
+              onClick={() => setActiveMetric('aov')}
+            >
+              {isZh ? '客單價' : 'AOV'}
+            </button>
           </div>
         </div>
 
