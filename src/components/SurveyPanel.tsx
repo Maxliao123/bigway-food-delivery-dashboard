@@ -424,10 +424,10 @@ function BadReviewPie({ serviceBad, cleanlinessBad, foodBad, isZh }: {
   isZh: boolean;
 }) {
   const slices: PieSlice[] = [
-    { label: isZh ? '服務 Service' : 'Service', value: serviceBad, color: '#f97316' },
-    { label: isZh ? '衛生 Cleanliness' : 'Cleanliness', value: cleanlinessBad, color: '#06b6d4' },
-    { label: isZh ? '食物 Food' : 'Food Quality', value: foodBad, color: '#a855f7' },
-  ];
+    { label: isZh ? '服務 Service' : 'Service', value: serviceBad, color: '' },
+    { label: isZh ? '衛生 Cleanliness' : 'Cleanliness', value: cleanlinessBad, color: '' },
+    { label: isZh ? '食物 Food' : 'Food Quality', value: foodBad, color: '' },
+  ].sort((a, b) => b.value - a.value).map((sl, i) => ({ ...sl, color: PIE_COLORS[i] }));
 
   const total = slices.reduce((s, sl) => s + sl.value, 0);
   if (total === 0) {
@@ -497,8 +497,8 @@ function BadReviewPie({ serviceBad, cleanlinessBad, foodBad, isZh }: {
 /*  Mini Pie Chart (generic, for per-store distributions)             */
 /* ------------------------------------------------------------------ */
 
-const HEARD_COLORS = ['#f97316','#fb923c','#fbbf24','#a3e635','#34d399','#22d3ee','#818cf8','#9ca3af'];
-const RACE_COLORS = ['#6366f1','#8b5cf6','#ec4899','#14b8a6','#f59e0b','#ef4444','#3b82f6','#9ca3af'];
+// Unified palette: rank 1 (largest) → rank N, consistent across all pie charts
+const PIE_COLORS = ['#f97316','#06b6d4','#a855f7','#34d399','#f59e0b','#3b82f6','#ec4899','#84cc16','#9ca3af','#6366f1'];
 
 function MiniPieChart({ data, title, colors, breakdowns }: {
   data: [string, number][];
@@ -923,12 +923,12 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendG
                                   <MiniPieChart
                                     data={allHeardDist.map(([l, v]) => [l, v] as [string, number])}
                                     title={isZh ? '怎麼知道我們' : 'How They Found Us'}
-                                    colors={HEARD_COLORS}
+                                    colors={PIE_COLORS}
                                     breakdowns={allHeardDist.map(e => e[2])}
                                   />
                                 </div>
                                 <div className="survey-expand-col">
-                                  <MiniPieChart data={allRaceDist} title={isZh ? '族群分布' : 'Ethnicity'} colors={RACE_COLORS} />
+                                  <MiniPieChart data={allRaceDist} title={isZh ? '族群分布' : 'Ethnicity'} colors={PIE_COLORS} />
                                 </div>
                               </div>
                             </div>
@@ -972,7 +972,7 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendG
                                 <MiniPieChart
                                   data={s.heardFromDist.map(([l, v]) => [l, v] as [string, number])}
                                   title={isZh ? '怎麼知道我們' : 'How They Found Us'}
-                                  colors={HEARD_COLORS}
+                                  colors={PIE_COLORS}
                                   breakdowns={s.heardFromDist.map(e => e[2])}
                                 />
                               </div>
@@ -980,7 +980,7 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendG
                                 <MiniPieChart
                                   data={s.raceDist}
                                   title={isZh ? '族群分布' : 'Ethnicity'}
-                                  colors={RACE_COLORS}
+                                  colors={PIE_COLORS}
                                 />
                               </div>
                             </div>
