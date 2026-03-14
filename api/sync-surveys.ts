@@ -189,11 +189,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(200).json({
-    version: 8,
     timestamp: new Date().toISOString(),
-    supabaseUrlLen: supabaseUrl.length,
-    supabaseKeyPrefix: supabaseKey.slice(0, 10),
-    supabaseKeyLen: supabaseKey.length,
     results,
   });
 }
