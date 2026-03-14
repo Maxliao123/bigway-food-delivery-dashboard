@@ -985,6 +985,16 @@ body {
   border-top: none !important;
 }
 .survey-table-expand-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+.survey-table-expand-content.survey-expand-open {
+  max-height: 500px;
+  opacity: 1;
+}
+.survey-expand-inner {
   padding: 16px 20px;
   background: rgba(99, 102, 241, 0.05);
   border-top: 1px solid rgba(99, 102, 241, 0.15);

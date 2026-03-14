@@ -628,10 +628,10 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
                           {s.avgOverall > 0 ? s.avgOverall.toFixed(1) : '—'}
                         </td>
                       </tr>
-                      {selectedStore === s.storeName && (
-                        <tr className="survey-table-expand-row">
-                          <td colSpan={5}>
-                            <div className="survey-table-expand-content">
+                      <tr className="survey-table-expand-row">
+                        <td colSpan={5}>
+                          <div className={`survey-table-expand-content ${selectedStore === s.storeName ? 'survey-expand-open' : ''}`}>
+                            <div className="survey-expand-inner">
                               <h3 className="survey-section-subtitle" style={{ margin: '0 0 8px' }}>
                                 {isZh ? `${s.storeName} 差評原因分析` : `${s.storeName} — Bad Review Analysis`}
                               </h3>
@@ -642,9 +642,9 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
                                 isZh={isZh}
                               />
                             </div>
-                          </td>
-                        </tr>
-                      )}
+                          </div>
+                        </td>
+                      </tr>
                     </React.Fragment>
                   ))}
                   {sortedStats.length === 0 && (
