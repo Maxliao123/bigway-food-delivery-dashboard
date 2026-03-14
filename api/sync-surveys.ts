@@ -43,6 +43,8 @@ function toInt(v: string | undefined): number | null {
 /*  Main handler                                                       */
 /* ------------------------------------------------------------------ */
 
+export const config = { maxDuration: 60 };
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Auth check: Vercel Cron sends Authorization: Bearer <CRON_SECRET>
   const cronSecret = process.env.CRON_SECRET;
@@ -67,15 +69,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/[^\x20-\x7E]/g, '');
   const supabaseKey = (process.env.SUPABASE_SERVICE_KEY || '').replace(/[^\x20-\x7E]/g, '');
 
-  async function callRpc(fnName: string, params: Record<string, unknown>): Promise<{ error?: string }> {
+  async function bulkUpsert(rows: Record<string, unknown>[]): Promise<{ error?: string }> {
     try {
-      const body = new TextEncoder().encode(JSON.stringify(params));
-      const resp = await fetch(`${supabaseUrl}/rest/v1/rpc/${fnName}`, {
+      const body = new TextEncoder().encode(JSON.stringify(rows));
+      const resp = await fetch(`${supabaseUrl}/rest/v1/survey_responses`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'apikey': supabaseKey,
           'Authorization': `Bearer ${supabaseKey}`,
+          'Prefer': 'resolution=merge-duplicates',
         },
         body: body,
       });
@@ -136,36 +139,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!ts || !store) continue;
 
         records.push({
-          p_region: region,
-          p_submitted_at: ts,
-          p_store_name: store,
-          p_rating_overall: toInt(colOverall >= 0 ? r[colOverall] : undefined),
-          p_rating_service: toInt(colService >= 0 ? r[colService] : undefined),
-          p_rating_cleanliness: toInt(colClean >= 0 ? r[colClean] : undefined),
-          p_rating_food: toInt(colFood >= 0 ? r[colFood] : undefined),
-          p_positive_feedback: colPositive >= 0 ? r[colPositive]?.trim() || null : null,
-          p_improvement_suggestions: colImprove >= 0 ? r[colImprove]?.trim() || null : null,
-          p_heard_from: colHeard >= 0 ? r[colHeard]?.trim() || null : null,
-          p_race_demographic: colRace >= 0 ? r[colRace]?.trim() || null : null,
-          p_visit_frequency: colFreq >= 0 ? r[colFreq]?.trim() || null : null,
-          p_member_info: colMember >= 0 ? r[colMember]?.trim() || null : null,
-          p_respondent_name: colName >= 0 ? r[colName]?.trim() || null : null,
-          p_email: colEmail >= 0 ? r[colEmail]?.trim() || null : null,
+          region,
+          submitted_at: ts,
+          store_name: store,
+          rating_overall: toInt(colOverall >= 0 ? r[colOverall] : undefined),
+          rating_service: toInt(colService >= 0 ? r[colService] : undefined),
+          rating_cleanliness: toInt(colClean >= 0 ? r[colClean] : undefined),
+          rating_food: toInt(colFood >= 0 ? r[colFood] : undefined),
+          positive_feedback: colPositive >= 0 ? r[colPositive]?.trim() || null : null,
+          improvement_suggestions: colImprove >= 0 ? r[colImprove]?.trim() || null : null,
+          heard_from: colHeard >= 0 ? r[colHeard]?.trim() || null : null,
+          race_demographic: colRace >= 0 ? r[colRace]?.trim() || null : null,
+          visit_frequency: colFreq >= 0 ? r[colFreq]?.trim() || null : null,
+          member_info: colMember >= 0 ? r[colMember]?.trim() || null : null,
+          respondent_name: colName >= 0 ? r[colName]?.trim() || null : null,
+          email: colEmail >= 0 ? r[colEmail]?.trim() || null : null,
         });
       }
 
       total = records.length;
 
-      // Batch upsert via RPC (50 at a time)
-      const BATCH = 50;
+      // Bulk upsert (500 rows per request)
+      const BATCH = 500;
       for (let i = 0; i < records.length; i += BATCH) {
         const batch = records.slice(i, i + BATCH);
-        const rpcResults = await Promise.all(
-          batch.map((rec) => callRpc('upsert_survey_response', rec)),
-        );
-        const batchErrors = rpcResults.filter((r) => r.error);
-        if (batchErrors.length > 0) {
-          errors.push(`Batch ${Math.floor(i / BATCH) + 1}: ${batchErrors[0].error!}`);
+        const result = await bulkUpsert(batch);
+        if (result.error) {
+          errors.push(`Batch ${Math.floor(i / BATCH) + 1}: ${result.error}`);
         } else {
           inserted += batch.length;
         }
