@@ -33,6 +33,8 @@ type Props = {
   platformAovKpis?: PlatformKpi[];
   allMonths: string[];
   rawRows: SalesRow[];
+  totalBusinessRevenue?: number | null;
+  totalBusinessRevenueLoading?: boolean;
 };
 
 type MetricKey = 'revenue' | 'orders' | 'aov';
@@ -81,6 +83,25 @@ const formatPercent = (value: number | null | undefined) => {
   const pct = (value * 100).toFixed(1);
   return `${pct.replace(/\.0$/, '')}%`;
 };
+
+type ViewMode = 'monthly' | 'daily';
+
+const VIEW_MODE_OPTIONS: { value: ViewMode; labelEn: string; labelZh: string }[] = [
+  { value: 'monthly', labelEn: 'Monthly', labelZh: '月總計' },
+  { value: 'daily', labelEn: 'Daily Avg', labelZh: '日均' },
+];
+
+function daysInMonth(monthIso: string | null): number {
+  if (!monthIso) return 30;
+  const d = new Date(monthIso);
+  if (Number.isNaN(d.getTime())) return 30;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+}
+
+function calcMomSafe(curr: number, prev: number | null): number | null {
+  if (prev == null || prev === 0) return null;
+  return (curr - prev) / prev;
+}
 
 const getDeltaClass = (value: number | null | undefined) => {
   if (value == null) return '';
@@ -168,7 +189,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
   const FALLBACK_COLORS = ['#4C9DFF', '#6EE7B7', '#F97373', '#FBBF24'];
 
   // 數值標籤字級與上方 Platform breakdown 表格一致
-  const labelFontSize = 12;
+  const labelFontSize = 5;
 
   // 避免同一個 x 位置上標籤互相重疊
   const usedLabelY: Record<number, number[]> = {};
@@ -233,7 +254,7 @@ const PlatformTrendChart: React.FC<PlatformTrendChartProps> = ({
             x={getX(idx)}
             y={margin.top + chartHeight + 18}
             textAnchor="middle"
-            fontSize={12}
+            fontSize={4}
             fill="rgba(255,255,255,0.55)"
           >
             {monthLabelFn(m)}
@@ -334,12 +355,16 @@ export const ExecutiveSummary: React.FC<Props> = ({
   regionalAovKpis,
   allMonths,
   rawRows,
+  totalBusinessRevenue,
+  totalBusinessRevenueLoading,
 }) => {
   const [activeMetric, setActiveMetric] = useState<MetricKey>('revenue');
   const [sortKey, setSortKey] = useState<SortKey>('current');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [viewMode, setViewMode] = useState<ViewMode>('monthly');
 
   const isZh = language === 'zh';
+  const isDaily = viewMode === 'daily';
 
   const monthLabel = (iso: string | null) => {
     if (!iso) return '—';
@@ -589,6 +614,37 @@ export const ExecutiveSummary: React.FC<Props> = ({
     return rows;
   }, [breakdownRows, sortKey, sortDir]);
 
+  const daysCurr = daysInMonth(selectedMonth);
+  const daysPrev = daysInMonth(prevMonthSelection);
+
+  // Daily average transformation for breakdown table
+  const displayBreakdownRows = useMemo(() => {
+    if (!isDaily || activeMetric === 'aov') return sortedBreakdownRows;
+    return sortedBreakdownRows.map((row) => {
+      const dailyCurr = row.current / daysCurr;
+      const dailyPrev = row.previous != null ? row.previous / daysPrev : null;
+      return {
+        ...row,
+        current: dailyCurr,
+        previous: dailyPrev,
+        mom: calcMomSafe(dailyCurr, dailyPrev),
+        // share stays the same (proportional)
+      };
+    });
+  }, [sortedBreakdownRows, isDaily, activeMetric, daysCurr, daysPrev]);
+
+  // Daily average transformation for trend chart
+  const displayTrendSeries = useMemo(() => {
+    if (!isDaily || activeMetric === 'aov') return platformTrendSeries;
+    return platformTrendSeries.map((s) => ({
+      ...s,
+      points: s.points.map((p) => ({
+        ...p,
+        value: p.value / daysInMonth(p.month),
+      })),
+    }));
+  }, [platformTrendSeries, isDaily, activeMetric]);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -640,7 +696,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
       formatter: formatNumber,
     },
     aov: {
-      labelEn: 'Global AOV',
+      labelEn: 'AOV',
       labelZh: '整體客單價',
       formatter: formatAov,
     },
@@ -648,29 +704,70 @@ export const ExecutiveSummary: React.FC<Props> = ({
 
   const activeFormatter = metricConfig[activeMetric].formatter;
 
-  const platformTitleMap: Record<MetricKey, { en: string; zh: string }> = {
+  const platformTitleMap: Record<MetricKey, { en: string; zh: string; enDaily: string; zhDaily: string }> = {
     revenue: {
       en: 'Platform breakdown — Total revenue',
       zh: '平台拆分 — 總營收',
+      enDaily: 'Platform breakdown — Daily Avg revenue',
+      zhDaily: '平台拆分 — 日均營收',
     },
     orders: {
       en: 'Platform breakdown — Total orders',
       zh: '平台拆分 — 訂單數',
+      enDaily: 'Platform breakdown — Daily Avg orders',
+      zhDaily: '平台拆分 — 日均單量',
     },
     aov: {
-      en: 'Platform breakdown — Global AOV',
+      en: 'Platform breakdown — AOV',
       zh: '平台拆分 — 客單價',
+      enDaily: 'Platform breakdown — AOV',
+      zhDaily: '平台拆分 — 客單價',
     },
   };
 
   const firstColumnLabel = isZh ? '平台' : 'Platform';
-  const cardTitle = isZh
-    ? platformTitleMap[activeMetric].zh
-    : platformTitleMap[activeMetric].en;
+  const cardTitle = isDaily
+    ? isZh ? platformTitleMap[activeMetric].zhDaily : platformTitleMap[activeMetric].enDaily
+    : isZh ? platformTitleMap[activeMetric].zh : platformTitleMap[activeMetric].en;
 
-  const effectiveRevenueKpi = cardKpis.revenue;
-  const effectiveOrdersKpi = cardKpis.orders;
+  // Daily-adjusted KPIs
+  const effectiveRevenueKpi = useMemo(() => {
+    const raw = cardKpis.revenue;
+    if (!isDaily) return raw;
+    const curr = raw.current / daysCurr;
+    const prev = raw.previous != null ? raw.previous / daysPrev : null;
+    return { current: curr, previous: prev, mom: calcMomSafe(curr, prev) };
+  }, [cardKpis.revenue, isDaily, daysCurr, daysPrev]);
+
+  const effectiveOrdersKpi = useMemo(() => {
+    const raw = cardKpis.orders;
+    if (!isDaily) return raw;
+    const curr = raw.current / daysCurr;
+    const prev = raw.previous != null ? raw.previous / daysPrev : null;
+    return { current: curr, previous: prev, mom: calcMomSafe(curr, prev) };
+  }, [cardKpis.orders, isDaily, daysCurr, daysPrev]);
+
+  // AOV: revenue/orders — days cancel out, so no change in daily mode
   const effectiveAovKpi = cardKpis.aov;
+
+  // Effective total biz revenue (÷ days in daily mode)
+  const effectiveTotalBizRevenue = useMemo(() => {
+    if (totalBusinessRevenue == null) return null;
+    return isDaily ? totalBusinessRevenue / daysCurr : totalBusinessRevenue;
+  }, [totalBusinessRevenue, isDaily, daysCurr]);
+
+  // Delivery revenue share = delivery revenue / total business revenue
+  // Ratio is the same in both modes (days cancel out)
+  const deliveryShare = useMemo(() => {
+    if (
+      effectiveTotalBizRevenue == null ||
+      effectiveTotalBizRevenue <= 0 ||
+      effectiveRevenueKpi.current <= 0
+    ) {
+      return null;
+    }
+    return effectiveRevenueKpi.current / effectiveTotalBizRevenue;
+  }, [effectiveRevenueKpi.current, effectiveTotalBizRevenue]);
 
   return (
     <div className="exec-wrapper">
@@ -681,7 +778,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 12,
-          gap: 12,
+          gap: 8,
           flexWrap: 'wrap',
         }}
       >
@@ -694,34 +791,109 @@ export const ExecutiveSummary: React.FC<Props> = ({
             </span>
           )}
         </div>
+
+        {/* View Mode toggle — sits above AOV card */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
+            {isZh ? '顯示：' : 'View:'}
+          </span>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: 2,
+              borderRadius: 9999,
+              border: '1px solid #374151',
+              background: '#020617',
+            }}
+          >
+            {VIEW_MODE_OPTIONS.map((opt) => {
+              const active = viewMode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setViewMode(opt.value)}
+                  style={{
+                    border: 'none',
+                    borderRadius: 9999,
+                    padding: '2px 8px',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    background: active ? '#1f2937' : 'transparent',
+                    color: active ? '#f9fafb' : '#9ca3af',
+                    transition: 'background 0.15s ease, color 0.15s ease',
+                  }}
+                >
+                  {isZh ? opt.labelZh : opt.labelEn}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* KPI cards */}
       <div className="kpi-grid">
         <div className="kpi-card" onClick={() => setActiveMetric('revenue')}>
-          <div className="kpi-title">
-            {isZh
-              ? metricConfig.revenue.labelZh
-              : metricConfig.revenue.labelEn}
-          </div>
-          <div className="kpi-value">
-            {formatCurrency(effectiveRevenueKpi.current)}
-          </div>
-          <div className="kpi-sub">
-            {isZh ? '對比' : 'vs'} {periodInfo.previousLabel}
-            {' · '}
-            <span className={getDeltaClass(effectiveRevenueKpi.mom)}>
-              {formatPercent(effectiveRevenueKpi.mom)}
-            </span>
+          <div className="kpi-card-inner">
+            <div className="kpi-card-main">
+              <div className="kpi-title">
+                {isDaily
+                  ? isZh ? '日均營收' : 'Daily Avg Revenue'
+                  : isZh ? metricConfig.revenue.labelZh : metricConfig.revenue.labelEn}
+              </div>
+              <div className="kpi-value">
+                {formatCurrency(effectiveRevenueKpi.current)}
+              </div>
+              <div className="kpi-sub">
+                {isZh ? '對比' : 'vs'} {periodInfo.previousLabel}
+                {' · '}
+                <span className={getDeltaClass(effectiveRevenueKpi.mom)}>
+                  {formatPercent(effectiveRevenueKpi.mom)}
+                </span>
+              </div>
+            </div>
+
+            {deliveryShare != null && (
+              <div className="kpi-delivery-share">
+                <div className="kpi-delivery-share-pct">
+                  {(deliveryShare * 100).toFixed(1).replace(/\.0$/, '')}%
+                </div>
+                <div className="kpi-delivery-share-label">
+                  {isZh ? '外送占比' : 'Delivery %'}
+                </div>
+                <div className="kpi-delivery-share-total">
+                  {isDaily
+                    ? isZh ? '日均整體營收' : 'Daily Biz Rev.'
+                    : isZh ? '整體營收' : 'Total Biz Rev.'}
+                  {': '}
+                  {formatCurrency(effectiveTotalBizRevenue ?? null)}
+                </div>
+              </div>
+            )}
+
+            {deliveryShare == null && !totalBusinessRevenueLoading && (
+              <div className="kpi-delivery-share kpi-delivery-share-empty">
+                <div className="kpi-delivery-share-label">
+                  {isZh ? '外送占比' : 'Delivery %'}
+                </div>
+                <div style={{ fontSize: 10, color: '#6b7280' }}>
+                  {isZh ? '暫無數據' : 'No data'}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="kpi-card" onClick={() => setActiveMetric('orders')}>
           <div className="kpi-title">
-            {isZh ? metricConfig.orders.labelZh : metricConfig.orders.labelEn}
+            {isDaily
+              ? isZh ? '日均單量' : 'Daily Avg Orders'
+              : isZh ? metricConfig.orders.labelZh : metricConfig.orders.labelEn}
           </div>
           <div className="kpi-value">
-            {formatNumber(effectiveOrdersKpi.current)}
+            {formatNumber(isDaily ? Math.round(effectiveOrdersKpi.current) : effectiveOrdersKpi.current)}
           </div>
           <div className="kpi-sub">
             {isZh ? '對比' : 'vs'} {periodInfo.previousLabel}
@@ -878,7 +1050,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody>
-              {sortedBreakdownRows.map((row) => (
+              {displayBreakdownRows.map((row) => (
                 <tr key={row.key}>
                   <td>{row.key}</td>
                   <td style={{ textAlign: 'right' }}>
@@ -909,7 +1081,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
                   </td>
                 </tr>
               ))}
-              {sortedBreakdownRows.length === 0 && (
+              {displayBreakdownRows.length === 0 && (
                 <tr>
                   <td
                     colSpan={5}
@@ -924,13 +1096,17 @@ export const ExecutiveSummary: React.FC<Props> = ({
         </div>
 
         {/* 近三個月趨勢折線圖 */}
-        {platformTrendSeries.length > 0 && (
+        {displayTrendSeries.length > 0 && (
           <div className="platform-trend-section">
             <div className="platform-trend-header">
               <div className="platform-trend-title">
-                {isZh
-                  ? '近三個月各平台業績趨勢'
-                  : '3-month platform performance trend'}
+                {isDaily
+                  ? isZh
+                    ? '近三個月各平台日均業績趨勢'
+                    : '3-month platform daily avg trend'
+                  : isZh
+                    ? '近三個月各平台業績趨勢'
+                    : '3-month platform performance trend'}
               </div>
               <div className="platform-trend-subtitle">
                 {isZh
@@ -948,7 +1124,7 @@ export const ExecutiveSummary: React.FC<Props> = ({
             </div>
 
             <PlatformTrendChart
-              series={platformTrendSeries}
+              series={displayTrendSeries}
               months={periodMonths}
               monthLabelFn={monthLabel}
               valueFormatter={activeFormatter}

@@ -4,28 +4,76 @@ import './App.css';
 import { useDashboardData } from './hooks/useDashboardData';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PlatformMatrix } from './components/PlatformMatrix';
-import { UberAdsSection } from './components/UberAdsSection';
-import { useAuth } from './hooks/useAuth';
-import { LoginPage } from './components/LoginPage';
+import { UberAdsPanel } from './components/UberAdsPanel';
+import { SurveyPanel } from './components/SurveyPanel';
+import { useTotalRevenue } from './hooks/useTotalRevenue';
+
+// ⭐ Supabase Auth
+import type { Session } from '@supabase/supabase-js';
+import { supabase } from './lib/supabaseClient';
 
 export type Lang = 'en' | 'zh';
 export type Scope = 'BC' | 'ON' | 'CA';
+type RoleScope = Scope | 'ALL' | 'MKT';
 
 function App() {
-  const auth = useAuth();
+  // ===== Auth 狀態 =====
+  const [session, setSession] = useState<Session | null>(null);
+  const [role, setRole] = useState<RoleScope | null>(null); // user_roles.role
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  // --- Determine allowed regions based on user role ---
-  const allowedRegions: Scope[] = useMemo(() => {
-    if (!auth.authEnabled || auth.allowedRegion === 'ALL') {
-      return ['BC', 'ON', 'CA'];
-    }
-    return [auth.allowedRegion as Scope];
-  }, [auth.authEnabled, auth.allowedRegion]);
+  // login form：只輸入「帳號代碼 + 密碼」
+  const [accountCode, setAccountCode] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
 
-  // --- All hooks must be called before any conditional return ---
+  // ===== Dashboard 狀態 =====
   const [selectedRegion, setSelectedRegion] = useState<Scope>('BC');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
-  const [language, setLanguage] = useState<Lang>('en');
+
+  // ===== Survey time filter =====
+  type TimeGranularity = 'day' | 'month' | 'year' | 'all';
+  const [timeGranularity, setTimeGranularity] = useState<TimeGranularity>('all');
+  const [timeValue, setTimeValue] = useState<string>(''); // YYYY-MM-DD / YYYY-MM / YYYY
+
+  // Compute date range from granularity + value
+  const surveyDateFrom = useMemo(() => {
+    if (timeGranularity === 'all' || !timeValue) return undefined;
+    if (timeGranularity === 'day') return `${timeValue}T00:00:00`;
+    if (timeGranularity === 'month') return `${timeValue}-01T00:00:00`;
+    if (timeGranularity === 'year') return `${timeValue}-01-01T00:00:00`;
+    return undefined;
+  }, [timeGranularity, timeValue]);
+
+  const surveyDateTo = useMemo(() => {
+    if (timeGranularity === 'all' || !timeValue) return undefined;
+    if (timeGranularity === 'day') {
+      const d = new Date(timeValue);
+      d.setDate(d.getDate() + 1);
+      return `${d.toISOString().slice(0, 10)}T00:00:00`;
+    }
+    if (timeGranularity === 'month') {
+      const [y, m] = timeValue.split('-').map(Number);
+      const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+      return `${next}-01T00:00:00`;
+    }
+    if (timeGranularity === 'year') return `${Number(timeValue) + 1}-01-01T00:00:00`;
+    return undefined;
+  }, [timeGranularity, timeValue]);
+
+  // 允許看到哪些 Region（依角色）
+  const effectiveRole: RoleScope = role ?? 'ALL';
+  const isMkt = effectiveRole === 'MKT';
+  const allowedRegions: Scope[] =
+    effectiveRole === 'ALL' || isMkt ? ['BC', 'ON', 'CA'] : [effectiveRole];
+
+  // 角色一旦變成 BC/ON/CA，就強制鎖定 Region（MKT 和 ALL 不鎖定）
+  useEffect(() => {
+    if (effectiveRole !== 'ALL' && effectiveRole !== 'MKT' && selectedRegion !== effectiveRole) {
+      setSelectedRegion(effectiveRole as Scope);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveRole]);
 
   const {
     loading,
@@ -45,53 +93,158 @@ function App() {
     rawRows,
   } = useDashboardData(selectedMonth ?? undefined, selectedRegion);
 
+  const {
+    loading: totalRevenueLoading,
+    totalRevenue: totalBusinessRevenue,
+  } = useTotalRevenue(selectedRegion, selectedMonth);
+
+  const [language, setLanguage] = useState<Lang>('en');
   const isZh = language === 'zh';
 
-  // Sync selectedRegion when allowed regions change (e.g. after login)
-  useEffect(() => {
-    if (!allowedRegions.includes(selectedRegion)) {
-      setSelectedRegion(allowedRegions[0]);
-    }
-  }, [allowedRegions, selectedRegion]);
+  const title = isMkt
+    ? (isZh ? 'Big Way 問卷回饋分析' : 'Big Way Survey Feedback')
+    : (isZh ? 'Big Way 外送數據儀表板' : 'Big Way Delivery Performance Dashboard');
+  const subtitle = isMkt
+    ? (isZh ? 'BC / CA / ON 門店客人問卷統計' : 'Dine-in customer survey analytics for BC / CA / ON')
+    : isZh
+      ? 'BC / CA / ON 外送平台的整體表現總覽'
+      : 'Strategic dashboard for BC / CA / ON delivery performance.';
+  const metaText = isZh
+    ? '資料來源 · Supabase · 自動更新'
+    : 'Data source · Supabase · Auto-refreshed';
 
+  // ===== 讀取現有登入狀態 + 對應角色 =====
+  useEffect(() => {
+    const init = async () => {
+      setAuthLoading(true);
+      setAuthError(null);
+
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        setAuthError(error.message);
+        setAuthLoading(false);
+        return;
+      }
+
+      const currentSession = data.session ?? null;
+      setSession(currentSession);
+
+      if (currentSession?.user) {
+        const { user } = currentSession;
+
+        // MKT 帳號直接設定角色
+        if (user.email === 'mkt@dashboard.internal') {
+          setRole('MKT');
+        } else {
+          const { data: roleRow, error: roleErr } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (roleErr) {
+            setAuthError(roleErr.message);
+          } else if (roleRow?.role) {
+            setRole(roleRow.role as RoleScope);
+          } else {
+            setRole('ALL');
+          }
+        }
+      }
+
+      setAuthLoading(false);
+    };
+
+    void init();
+  }, []);
+
+  // ===== 登入動作：accountCode -> email + password =====
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthLoading(true);
+
+    const trimmed = accountCode.trim().toLowerCase();
+    if (!trimmed) {
+      setAuthError(
+        isZh
+          ? '請輸入帳號代碼（bc / on / ca / all）'
+          : 'Please enter account code (bc / on / ca / all).',
+      );
+      setAuthLoading(false);
+      return;
+    }
+
+    // MKT 帳號：不走 Supabase auth，直接前端驗證
+    if (trimmed === 'mkt') {
+      if (password === 'bwmkt2026') {
+        setRole('MKT');
+        setSession({} as Session); // placeholder so UI shows logged-in
+        setAuthLoading(false);
+      } else {
+        setAuthError(isZh ? '密碼錯誤' : 'Invalid login credentials');
+        setAuthLoading(false);
+      }
+      return;
+    }
+
+    // 轉成內部 email，例如 bc -> bc@dashboard.internal
+    const email = `${trimmed}@dashboard.internal`;
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error || !data.session) {
+      setAuthError(error?.message ?? (isZh ? '登入失敗' : 'Login failed'));
+      setAuthLoading(false);
+      return;
+    }
+
+    setSession(data.session);
+
+    // 讀取 user_roles.role
+    const { data: roleRow, error: roleErr } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', data.session.user.id)
+      .maybeSingle();
+
+    if (roleErr) {
+      setAuthError(roleErr.message);
+      setRole('ALL');
+    } else if (roleRow?.role) {
+      setRole(roleRow.role as RoleScope);
+    } else {
+      setRole('ALL');
+    }
+
+    setAuthLoading(false);
+  };
+
+  const handleLogout = async () => {
+    if (!isMkt) await supabase.auth.signOut();
+    setSession(null);
+    setRole(null);
+    setAccountCode('');
+    setPassword('');
+  };
+
+  // ===== 月份選單初始化 =====
   useEffect(() => {
     if (allMonths.length && !selectedMonth) {
       setSelectedMonth(allMonths[allMonths.length - 1]);
     }
   }, [allMonths, selectedMonth]);
 
-  const prevSelectableMonth = useMemo(() => {
-    if (!selectedMonth) return null;
-    const idx = allMonths.indexOf(selectedMonth);
-    if (idx > 0) return allMonths[idx - 1];
-    return null;
-  }, [allMonths, selectedMonth]);
-
-  // --- Auth gate (after all hooks) ---
-  if (auth.authEnabled && auth.loading) {
-    return (
-      <div className="app-root">
-        <div
-          className="status status-loading"
-          style={{ margin: '40vh auto', maxWidth: 300, textAlign: 'center' }}
-        >
-          Loading…
-        </div>
-      </div>
-    );
-  }
-
-  if (auth.authEnabled && !auth.session) {
-    return <LoginPage onLogin={auth.signIn} />;
-  }
-
-  const title = isZh ? 'Food Delivery 外送儀表板' : 'Food Delivery Intelligence';
-  const subtitle = isZh
-    ? 'BC / CA / ON 外送平台的整體表現總覽'
-    : 'Strategic dashboard for BC / CA / ON delivery performance.';
-  const metaText = isZh
-    ? '資料來源 · Supabase · 自動更新'
-    : 'Data source · Supabase · Auto-refreshed';
+  // 用「下拉選單」算出的上一個月 → 拿來顯示「vs XXX」，也給 Uber Ads 用
+const prevSelectableMonth = useMemo(() => {
+  if (!selectedMonth) return null;
+  const idx = allMonths.indexOf(selectedMonth);
+  if (idx > 0) return allMonths[idx - 1];
+  return null;
+}, [allMonths, selectedMonth]);
 
   const monthLabel = (iso: string) => {
     const short = iso.slice(0, 7); // "YYYY-MM"
@@ -100,12 +253,180 @@ function App() {
     if (!year || !mNum || Number.isNaN(mNum)) return short;
 
     const MONTHS = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return `${MONTHS[mNum - 1]} ${year}`;
   };
 
+  // ===== Auth Loading 畫面 =====
+  if (authLoading) {
+    return (
+      <div className="app-root">
+        <div className="app-shell">
+          <div
+            style={{
+              height: '100vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#e5e7eb',
+              fontSize: 14,
+            }}
+          >
+            {isZh ? '檢查登入狀態…' : 'Checking session…'}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== 尚未登入：顯示登入表單 =====
+  if (!session) {
+    return (
+      <div className="app-root">
+        <div className="app-shell">
+          <div
+            style={{
+              minHeight: '100vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: 320,
+                padding: '24px 24px 20px',
+                borderRadius: 16,
+                background: '#020617',
+                border: '1px solid #1f2937',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.45)',
+              }}
+            >
+              <h1
+                style={{
+                  fontSize: 18,
+                  fontWeight: 600,
+                  marginBottom: 4,
+                  color: '#e5e7eb',
+                }}
+              >
+                {isZh ? 'Food Delivery 儀表板登入' : 'Food Delivery Dashboard Login'}
+              </h1>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: '#9ca3af',
+                  marginBottom: 16,
+                }}
+              >
+                {isZh
+                  ? '請輸入帳號代碼（bc / on / ca / all）與密碼。'
+                  : 'Enter account code (bc / on / ca / all) and password.'}
+              </p>
+
+              <form
+                onSubmit={handleLogin}
+                style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+              >
+                <label style={{ fontSize: 12, color: '#9ca3af' }}>
+                  {isZh ? '帳號代碼' : 'Account code'}
+                  <input
+                    type="text"
+                    value={accountCode}
+                    onChange={(e) => setAccountCode(e.target.value)}
+                    placeholder="bc / on / ca / all"
+                    style={{
+                      marginTop: 4,
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      border: '1px solid #374151',
+                      background: '#020617',
+                      color: '#e5e7eb',
+                      fontSize: 13,
+                    }}
+                  />
+                </label>
+
+                <label style={{ fontSize: 12, color: '#9ca3af' }}>
+                  {isZh ? '密碼' : 'Password'}
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={{
+                      marginTop: 4,
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      border: '1px solid #374151',
+                      background: '#020617',
+                      color: '#e5e7eb',
+                      fontSize: 13,
+                    }}
+                  />
+                </label>
+
+                {authError && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: '#f97373',
+                      marginTop: 4,
+                    }}
+                  >
+                    {authError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  style={{
+                    marginTop: 6,
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 9999,
+                    border: 'none',
+                    background:
+                      authLoading
+                        ? '#1f2937'
+                        : 'linear-gradient(90deg,#2563eb,#4f46e5)',
+                    color: '#f9fafb',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: authLoading ? 'default' : 'pointer',
+                  }}
+                >
+                  {authLoading
+                    ? isZh
+                      ? '登入中…'
+                      : 'Signing in…'
+                    : isZh
+                    ? '登入'
+                    : 'Sign in'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== 已登入：顯示原本儀表板 =====
   return (
     <div className="app-root">
       <div className="app-shell">
@@ -113,7 +434,9 @@ function App() {
         <header className="app-header">
           <div>
             <p className="app-badge">
-              {isZh ? 'FOOD DELIVERY · 內部' : 'FOOD DELIVERY · INTERNAL'}
+              {isMkt
+                ? (isZh ? 'SURVEY · 內部' : 'SURVEY · INTERNAL')
+                : (isZh ? 'FOOD DELIVERY · 內部' : 'FOOD DELIVERY · INTERNAL')}
             </p>
             <h1 className="app-title">{title}</h1>
             <p className="app-subtitle">{subtitle}</p>
@@ -122,145 +445,259 @@ function App() {
           <div className="app-meta">
             <span className="app-meta-pill">{metaText}</span>
 
-            <div className="lang-toggle">
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="lang-toggle">
+                <button
+                  className={
+                    'lang-button' +
+                    (language === 'en' ? ' lang-button-active' : '')
+                  }
+                  onClick={() => setLanguage('en')}
+                >
+                  EN
+                </button>
+                <button
+                  className={
+                    'lang-button' +
+                    (language === 'zh' ? ' lang-button-active' : '')
+                  }
+                  onClick={() => setLanguage('zh')}
+                >
+                  中文
+                </button>
+              </div>
+
               <button
-                className={
-                  'lang-button' + (language === 'en' ? ' lang-button-active' : '')
-                }
-                onClick={() => setLanguage('en')}
+                onClick={handleLogout}
+                style={{
+                  marginLeft: 8,
+                  padding: '4px 10px',
+                  borderRadius: 9999,
+                  border: '1px solid #374151',
+                  background: 'transparent',
+                  color: '#9ca3af',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                }}
               >
-                EN
-              </button>
-              <button
-                className={
-                  'lang-button' + (language === 'zh' ? ' lang-button-active' : '')
-                }
-                onClick={() => setLanguage('zh')}
-              >
-                中文
+                {isZh ? '登出' : 'Sign out'}
               </button>
             </div>
-
-            {auth.authEnabled && (
-              <button className="logout-button" onClick={auth.signOut}>
-                {isZh ? '登出' : 'Sign Out'}
-              </button>
-            )}
           </div>
         </header>
 
-        {/* ===== Global Filters ===== */}
-        {!loading && !error && allMonths.length > 0 && (
-          <div className="filter-bar">
-            <div className="filter-group">
-              <span className="filter-label">{isZh ? '區域' : 'Region'}</span>
-              <div className="scope-toggle">
-                {allowedRegions.map((region) => (
-                  <button
-                    key={region}
-                    type="button"
-                    className={
-                      'scope-pill' +
-                      (selectedRegion === region ? ' scope-pill-active' : '')
-                    }
-                    onClick={() => setSelectedRegion(region)}
+        {/* ===== MKT: Survey Page ===== */}
+        {isMkt && (
+          <>
+            <div className="filter-bar">
+              <div className="filter-group">
+                <span className="filter-label">{isZh ? '區域' : 'Region'}</span>
+                <div className="scope-toggle">
+                  {(['BC', 'ON', 'CA'] as Scope[]).map((region) => (
+                    <button
+                      key={region}
+                      type="button"
+                      className={
+                        'scope-pill' +
+                        (selectedRegion === region ? ' scope-pill-active' : '')
+                      }
+                      onClick={() => setSelectedRegion(region)}
+                    >
+                      {region}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="filter-group">
+                <span className="filter-label">{isZh ? '時間' : 'Period'}</span>
+                <div className="scope-toggle">
+                  {([
+                    ['all', isZh ? '全部' : 'All'],
+                    ['year', isZh ? '年' : 'Year'],
+                    ['month', isZh ? '月' : 'Month'],
+                    ['day', isZh ? '日' : 'Day'],
+                  ] as const).map(([g, label]) => (
+                    <button
+                      key={g}
+                      type="button"
+                      className={
+                        'scope-pill' +
+                        (timeGranularity === g ? ' scope-pill-active' : '')
+                      }
+                      onClick={() => {
+                        setTimeGranularity(g as TimeGranularity);
+                        setTimeValue('');
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {timeGranularity === 'day' && (
+                  <input
+                    type="date"
+                    className="filter-select filter-date-input"
+                    value={timeValue}
+                    onChange={(e) => setTimeValue(e.target.value)}
+                  />
+                )}
+                {timeGranularity === 'month' && (
+                  <input
+                    type="month"
+                    className="filter-select filter-date-input"
+                    value={timeValue}
+                    onChange={(e) => setTimeValue(e.target.value)}
+                  />
+                )}
+                {timeGranularity === 'year' && (
+                  <select
+                    className="filter-select"
+                    value={timeValue}
+                    onChange={(e) => setTimeValue(e.target.value)}
                   >
-                    {region}
-                  </button>
-                ))}
+                    <option value="">{isZh ? '選擇年份' : 'Select year'}</option>
+                    {Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2023 + i).map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
+            <SurveyPanel
+              language={language}
+              selectedRegion={selectedRegion}
+              dateFrom={surveyDateFrom}
+              dateTo={surveyDateTo}
+            />
+          </>
+        )}
 
-            <div className="filter-group">
-              <span className="filter-label">
-                {isZh ? '分析月份' : 'Analysis month'}
-              </span>
-              <select
-                className="filter-select"
-                value={selectedMonth ?? ''}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-              >
-                {allMonths.map((m) => (
-                  <option key={m} value={m}>
-                    {monthLabel(m)}
-                  </option>
-                ))}
-              </select>
-              {prevSelectableMonth && (
-                <span className="filter-hint">
-                  {isZh ? '對比' : 'vs'} {monthLabel(prevSelectableMonth)}
-                </span>
+        {/* ===== Dashboard (non-MKT roles) ===== */}
+        {!isMkt && (
+          <>
+            {/* Global Filters */}
+            {!loading && !error && allMonths.length > 0 && (
+              <div className="filter-bar">
+                <div className="filter-group">
+                  <span className="filter-label">{isZh ? '區域' : 'Region'}</span>
+                  <div className="scope-toggle">
+                    {(['BC', 'ON', 'CA'] as Scope[]).map((region) => {
+                      const disabled = !allowedRegions.includes(region);
+                      return (
+                        <button
+                          key={region}
+                          type="button"
+                          className={
+                            'scope-pill' +
+                            (selectedRegion === region ? ' scope-pill-active' : '') +
+                            (disabled ? ' scope-pill-disabled' : '')
+                          }
+                          onClick={() => {
+                            if (!disabled) setSelectedRegion(region);
+                          }}
+                          disabled={disabled}
+                        >
+                          {region}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="filter-group">
+                  <span className="filter-label">
+                    {isZh ? '分析月份' : 'Analysis month'}
+                  </span>
+                  <select
+                    className="filter-select"
+                    value={selectedMonth ?? ''}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                  >
+                    {allMonths.map((m) => (
+                      <option key={m} value={m}>
+                        {monthLabel(m)}
+                      </option>
+                    ))}
+                  </select>
+                  {prevSelectableMonth && (
+                    <span className="filter-hint">
+                      {isZh ? '對比' : 'vs'} {monthLabel(prevSelectableMonth)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Loading / Error */}
+            {loading && (
+              <div className="status status-loading">
+                {isZh ? '資料載入中…' : 'Loading data…'}
+              </div>
+            )}
+
+            {error && (
+              <div className="status status-error">
+                {isZh ? '載入資料發生錯誤：' : 'Error loading data: '}
+                {error}
+              </div>
+            )}
+
+            {/* Main Dashboard */}
+            {!loading &&
+              !error &&
+              revenueKpi &&
+              ordersKpi &&
+              aovKpi &&
+              selectedMonth && (
+                <main className="dashboard-grid">
+                  <section className="section-card section-kpi">
+                    <ExecutiveSummary
+                      language={language}
+                      selectedRegion={selectedRegion}
+                      selectedMonth={selectedMonth}
+                      currentMonth={currentMonth}
+                      prevMonth={prevMonth}
+                      revenueKpi={revenueKpi}
+                      ordersKpi={ordersKpi}
+                      aovKpi={aovKpi}
+                      regionalRevenueKpis={regionalRevenueKpis}
+                      regionalOrdersKpis={regionalOrdersKpis}
+                      regionalAovKpis={regionalAovKpis}
+                      platformRevenueKpis={platformRevenueKpis}
+                      platformOrdersKpis={platformOrdersKpis}
+                      platformAovKpis={platformAovKpis}
+                      allMonths={allMonths}
+                      rawRows={rawRows}
+                      totalBusinessRevenue={totalBusinessRevenue}
+                      totalBusinessRevenueLoading={totalRevenueLoading}
+                    />
+                  </section>
+
+                  <section className="section-card">
+                    <PlatformMatrix
+                      language={language}
+                      selectedRegion={selectedRegion}
+                      selectedMonth={selectedMonth}
+                    />
+                  </section>
+
+                  <section className="section-card">
+                    <UberAdsPanel
+                      language={language}
+                      selectedRegion={selectedRegion}
+                      currentMonthIso={selectedMonth}
+                      prevMonthIso={prevSelectableMonth}
+                    />
+                  </section>
+                </main>
               )}
-            </div>
-          </div>
+          </>
         )}
-
-        {/* ===== Loading / Error ===== */}
-        {loading && (
-          <div className="status status-loading">
-            {isZh ? '資料載入中…' : 'Loading data…'}
-          </div>
-        )}
-
-        {error && (
-          <div className="status status-error">
-            {isZh ? '載入資料發生錯誤：' : 'Error loading data: '}
-            {error}
-          </div>
-        )}
-
-        {/* ===== Main Dashboard (only 2 sections kept) ===== */}
-        {!loading &&
-          !error &&
-          revenueKpi &&
-          ordersKpi &&
-          aovKpi &&
-          selectedMonth && (
-            <main className="dashboard-grid">
-              {/* 1️⃣ KPI + Regional / Platform summary */}
-              <section className="section-card section-kpi">
-                <ExecutiveSummary
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                  currentMonth={currentMonth}
-                  prevMonth={prevMonth}
-                  revenueKpi={revenueKpi}
-                  ordersKpi={ordersKpi}
-                  aovKpi={aovKpi}
-                  regionalRevenueKpis={regionalRevenueKpis}
-                  regionalOrdersKpis={regionalOrdersKpis}
-                  regionalAovKpis={regionalAovKpis}
-                  platformRevenueKpis={platformRevenueKpis}
-                  platformOrdersKpis={platformOrdersKpis}
-                  platformAovKpis={platformAovKpis}
-                  allMonths={allMonths}
-                  rawRows={rawRows}
-                />
-              </section>
-
-              {/* 2️⃣ Platform Velocity Matrix */}
-              <section className="section-card">
-                <PlatformMatrix
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                />
-              </section>
-
-              {/* 3️⃣ Uber Ads Performance */}
-              <section className="section-card">
-                <UberAdsSection
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                />
-              </section>
-            </main>
-          )}
       </div>
     </div>
   );
 }
 
 export default App;
+

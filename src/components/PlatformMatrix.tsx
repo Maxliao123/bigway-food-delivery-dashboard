@@ -1,5 +1,6 @@
 // src/components/PlatformMatrix.tsx
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   usePlatformMatrix,
   type MatrixPlatformFilter,
@@ -50,8 +51,16 @@ function momCellStyle(mom: number | null): React.CSSProperties {
   return { color: '#9ca3af' };
 }
 
-// 顏色改成同一色系：最舊淡、中間、中等、最新亮
-const MONTH_COLORS = ['#4b5563', '#64748b', '#4f8cff'];
+// 各平台折線色
+const PLATFORM_BAR_HIGHLIGHT: Record<MatrixPlatformFilter, string> = {
+  ALL: '#94a3b8', // 柔灰白（slate-400）
+  UBER: '#3b82f6', // 藍
+  Fantuan: '#22c55e', // 綠
+  Doordash: '#eab308', // 黃
+};
+
+// platform mix 堆疊圖：每列最多幾間店
+const STORES_PER_ROW_MIX = 13;
 
 type SortKey =
   | 'store_name'
@@ -85,6 +94,25 @@ const PLATFORM_OPTIONS: {
   { value: 'Doordash', labelEn: 'Doordash', labelZh: 'Doordash' },
 ];
 
+type ViewMode = 'monthly' | 'daily';
+
+const VIEW_MODE_OPTIONS: { value: ViewMode; labelEn: string; labelZh: string }[] = [
+  { value: 'monthly', labelEn: 'Monthly', labelZh: '月總計' },
+  { value: 'daily', labelEn: 'Daily Avg', labelZh: '日均' },
+];
+
+function daysInMonth(monthIso: string | null): number {
+  if (!monthIso) return 30;
+  const d = new Date(monthIso);
+  if (Number.isNaN(d.getTime())) return 30;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+}
+
+function calcMomFromValues(curr: number, prev: number | null): number | null {
+  if (prev === null || prev === 0) return null;
+  return (curr - prev) / prev;
+}
+
 const platformLabel = (value: MatrixPlatformFilter, isZh: boolean) => {
   switch (value) {
     case 'ALL':
@@ -110,6 +138,190 @@ const monthLabel = (iso: string, lang: Lang) => {
   return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-CA', opts);
 };
 
+// ========= Per-store mini line chart =========
+
+type StoreLineChartProps = {
+  storeName: string;
+  values: number[];
+  months: string[];
+  lineColor: string;
+  language: Lang;
+  valueFormatter: (v: number) => string;
+};
+
+const StoreLineChart: React.FC<StoreLineChartProps> = ({
+  storeName,
+  values,
+  months,
+  lineColor,
+  language,
+  valueFormatter,
+}) => {
+  const width = 420;
+  const height = 160;
+  const margin = { top: 24, right: 16, bottom: 26, left: 28 };
+  const chartW = width - margin.left - margin.right;
+  const chartH = height - margin.top - margin.bottom;
+
+  const hasData = values.some((v) => v > 0);
+  if (!hasData) return null;
+
+  // Y domain with padding — only consider non-zero values (0 = store not yet open)
+  const positiveValues = values.filter((v) => v > 0);
+  const maxV = positiveValues.length > 0 ? Math.max(...positiveValues) : 0;
+  const minV = positiveValues.length > 0 ? Math.min(...positiveValues) : 0;
+
+  let domainMin = minV;
+  let domainMax = maxV;
+
+  if (domainMin === domainMax) {
+    const pad = domainMax === 0 ? 1 : domainMax * 0.1;
+    domainMin -= pad;
+    domainMax += pad;
+  } else {
+    const span = domainMax - domainMin;
+    domainMin -= span * 0.25; // bottom padding for below-labels
+    domainMax += span * 0.25; // top padding for above-labels
+  }
+  if (domainMax <= domainMin) domainMax = domainMin + 1;
+
+  const xStep = months.length > 1 ? chartW / (months.length - 1) : chartW / 2;
+  const getX = (i: number) =>
+    margin.left + (months.length === 1 ? chartW / 2 : xStep * i);
+  const getY = (v: number) => {
+    const clamped = Math.max(domainMin, Math.min(domainMax, v));
+    const ratio = (clamped - domainMin) / (domainMax - domainMin);
+    return margin.top + chartH - ratio * chartH;
+  };
+
+  // Build path segments — break at zero values (store not yet open)
+  const pathSegments: string[] = [];
+  let seg = '';
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] === 0) {
+      if (seg) { pathSegments.push(seg); seg = ''; }
+      continue;
+    }
+    seg += `${seg === '' ? 'M' : ' L'} ${getX(i)} ${getY(values[i])}`;
+  }
+  if (seg) pathSegments.push(seg);
+
+  // Short month labels
+  const fmtMonth = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso.slice(5, 7);
+    return d.toLocaleDateString(language === 'zh' ? 'zh-TW' : 'en-CA', {
+      month: 'short',
+    });
+  };
+
+  // Show latest non-zero value in card header
+  let latestValue = 0;
+  for (let i = values.length - 1; i >= 0; i--) {
+    if (values[i] > 0) { latestValue = values[i]; break; }
+  }
+
+  return (
+    <div className="store-trend-card">
+      <div className="store-trend-card-header">
+        <span className="store-trend-card-name">{storeName}</span>
+        <span className="store-trend-card-latest">
+          {valueFormatter(latestValue)}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%' }}>
+        {/* Baseline */}
+        <line
+          x1={margin.left}
+          y1={margin.top + chartH}
+          x2={margin.left + chartW}
+          y2={margin.top + chartH}
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth={0.5}
+        />
+
+        {/* Line path segments (breaks at zero-value months) */}
+        {pathSegments.map((seg, si) => (
+          <path
+            key={si}
+            d={seg}
+            fill="none"
+            stroke={lineColor}
+            strokeWidth={2.2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
+
+        {/* Dots + value labels — skip zero months (store not yet open) */}
+        {values.map((v, i) => {
+          if (v === 0) return null; // skip: store not open yet
+
+          const x = getX(i);
+          const y = getY(v);
+
+          // Smart label placement: compare with non-zero neighbors
+          const prevIdx = values.slice(0, i).findLastIndex((val) => val > 0);
+          const nextIdx = values.findIndex((val, j) => j > i && val > 0);
+          const prevY = prevIdx >= 0 ? getY(values[prevIdx]) : y;
+          const nextY = nextIdx >= 0 ? getY(values[nextIdx]) : y;
+          const avgNeighborY = (prevY + nextY) / 2;
+          const placeBelow = avgNeighborY < y - 2;
+
+          const labelOffset = 10;
+          let labelY: number;
+          if (placeBelow) {
+            labelY = y + labelOffset + 6;
+            labelY = Math.min(labelY, margin.top + chartH - 2);
+          } else {
+            labelY = y - labelOffset;
+            labelY = Math.max(labelY, margin.top + 5);
+          }
+
+          return (
+            <g key={i}>
+              <circle
+                cx={x}
+                cy={y}
+                r={3.5}
+                fill={lineColor}
+                stroke="#020617"
+                strokeWidth={1}
+              />
+              <text
+                className="store-trend-value-label"
+                x={x}
+                y={labelY}
+                textAnchor="middle"
+                fontSize={7}
+                fill="rgba(229,231,235,0.9)"
+                fontWeight={500}
+              >
+                {valueFormatter(v).replace('$', '')}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* X-axis month labels */}
+        {months.map((m, i) => (
+          <text
+            className="store-trend-month-label"
+            key={m}
+            x={getX(i)}
+            y={height - 4}
+            textAnchor="middle"
+            fontSize={6.5}
+            fill="rgba(255,255,255,0.5)"
+          >
+            {fmtMonth(m)}
+          </text>
+        ))}
+      </svg>
+    </div>
+  );
+};
+
 export const PlatformMatrix: React.FC<Props> = ({
   language,
   selectedRegion,
@@ -117,6 +329,8 @@ export const PlatformMatrix: React.FC<Props> = ({
 }) => {
   const [platformFilter, setPlatformFilter] =
     useState<MatrixPlatformFilter>('ALL');
+  const [viewMode, setViewMode] = useState<ViewMode>('monthly');
+  const [hoveredStoreKey, setHoveredStoreKey] = useState<string | null>(null);
 
   const {
     loading,
@@ -126,6 +340,7 @@ export const PlatformMatrix: React.FC<Props> = ({
     rows,
     trendMonths,
     trendSeries,
+    storePlatformShare,
   } = usePlatformMatrix(selectedRegion, selectedMonth, platformFilter);
 
   const [sort, setSort] = useState<SortState>({
@@ -182,22 +397,40 @@ export const PlatformMatrix: React.FC<Props> = ({
     return copy;
   }, [rows, sort]);
 
+  // Daily average transformation
+  const isDaily = viewMode === 'daily';
+  const daysCurr = daysInMonth(currentMonth);
+  const daysPrev = daysInMonth(prevMonth);
+
+  const displayRows = useMemo(() => {
+    if (!isDaily) return sortedRows;
+    return sortedRows.map((row) => {
+      const dailyRevCurr = row.revenueCurrent / daysCurr;
+      const dailyRevPrev =
+        row.revenuePrev != null ? row.revenuePrev / daysPrev : null;
+      const dailyOrdCurr = row.ordersCurrent / daysCurr;
+      const dailyOrdPrev =
+        row.ordersPrev != null ? row.ordersPrev / daysPrev : null;
+
+      return {
+        ...row,
+        revenueCurrent: dailyRevCurr,
+        revenuePrev: dailyRevPrev,
+        revenueMom: calcMomFromValues(dailyRevCurr, dailyRevPrev),
+        ordersCurrent: dailyOrdCurr,
+        ordersPrev: dailyOrdPrev,
+        ordersMom: calcMomFromValues(dailyOrdCurr, dailyOrdPrev),
+        // AOV doesn't change (revenue/orders, days cancel out)
+      };
+    });
+  }, [sortedRows, isDaily, daysCurr, daysPrev]);
+
   const renderSortArrow = (key: SortKey) => {
     if (sort.key !== key) return ' ↕';
     return sort.direction === 'asc' ? ' ↑' : ' ↓';
   };
 
   // bar chart 用：找出最大值 & 依最新月份排序門店
-  const maxTrendValue = useMemo(() => {
-    let max = 0;
-    for (const s of trendSeries) {
-      for (const v of s.values) {
-        if (v > max) max = v;
-      }
-    }
-    return max;
-  }, [trendSeries]);
-
   const sortedTrendSeries = useMemo(() => {
     if (!trendMonths.length || !trendSeries.length) return [];
     const lastIdx = trendMonths.length - 1;
@@ -206,8 +439,27 @@ export const PlatformMatrix: React.FC<Props> = ({
     );
   }, [trendMonths, trendSeries]);
 
-  const latestIndex =
-    trendMonths.length > 0 ? trendMonths.length - 1 : -1;
+  const highlightColor = PLATFORM_BAR_HIGHLIGHT[platformFilter];
+
+  // Daily avg transformation for trend series
+  const displayTrendSeries = useMemo(() => {
+    if (!isDaily || !trendMonths.length) return sortedTrendSeries;
+    return sortedTrendSeries.map((series) => ({
+      ...series,
+      values: series.values.map((v, i) => v / daysInMonth(trendMonths[i])),
+    }));
+  }, [sortedTrendSeries, isDaily, trendMonths]);
+
+  // platform mix：依列分 chunk（每列最多 13 間店）
+  const chunkedPlatformShare = useMemo(() => {
+    if (!storePlatformShare || !storePlatformShare.length)
+      return [] as typeof storePlatformShare[];
+    const chunks: typeof storePlatformShare[] = [];
+    for (let i = 0; i < storePlatformShare.length; i += STORES_PER_ROW_MIX) {
+      chunks.push(storePlatformShare.slice(i, i + STORES_PER_ROW_MIX));
+    }
+    return chunks;
+  }, [storePlatformShare]);
 
   return (
     <section>
@@ -223,9 +475,19 @@ export const PlatformMatrix: React.FC<Props> = ({
         }}
       >
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
-            {isZh ? '多平台動能矩陣' : 'Platform Velocity Matrix'}
-          </h2>
+         <h2
+  style={{
+    fontSize: 13,
+    fontWeight: 500,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    color: '#9ca3af',
+    marginBottom: 4,
+  }}
+>
+  {isZh ? '門店拆分' : 'Store Breakdown'}
+</h2>
+
           <p style={{ fontSize: 13, color: '#9ca3af' }}>
             {isZh
               ? '各平台門店營收、單量與客單價的 MoM 表現，點擊欄位可排序。'
@@ -261,6 +523,44 @@ export const PlatformMatrix: React.FC<Props> = ({
                 <button
                   key={opt.value}
                   onClick={() => setPlatformFilter(opt.value)}
+                  style={{
+                    border: 'none',
+                    borderRadius: 9999,
+                    padding: '2px 8px',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    background: active ? '#1f2937' : 'transparent',
+                    color: active ? '#f9fafb' : '#9ca3af',
+                    transition: 'background 0.15s ease, color 0.15s ease',
+                  }}
+                >
+                  {isZh ? opt.labelZh : opt.labelEn}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* View Mode toggle */}
+          <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>
+            {isZh ? '顯示：' : 'View:'}
+          </span>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: 2,
+              borderRadius: 9999,
+              border: '1px solid #374151',
+              background: '#020617',
+            }}
+          >
+            {VIEW_MODE_OPTIONS.map((opt) => {
+              const active = viewMode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setViewMode(opt.value)}
                   style={{
                     border: 'none',
                     borderRadius: 9999,
@@ -328,6 +628,13 @@ export const PlatformMatrix: React.FC<Props> = ({
                   ? ` · 前一月：${prevMonth}`
                   : ` · Prev: ${prevMonth}`
                 : ''}
+              {isDaily && currentMonth && (
+                <>
+                  {' · '}
+                  {daysCurr}d
+                  {prevMonth ? ` / ${daysPrev}d` : ''}
+                </>
+              )}
             </span>
           </div>
 
@@ -343,7 +650,11 @@ export const PlatformMatrix: React.FC<Props> = ({
             <thead>
               <tr style={{ borderBottom: '1px solid #374151', color: '#9ca3af' }}>
                 <th
-                  style={{ textAlign: 'left', padding: '6px 4px', cursor: 'pointer' }}
+                  style={{
+                    textAlign: 'left',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                  }}
                   onClick={() => handleSort('store_name')}
                 >
                   {isZh ? '門店' : 'Store'}
@@ -359,7 +670,9 @@ export const PlatformMatrix: React.FC<Props> = ({
                   }}
                   onClick={() => handleSort('revenueCurrent')}
                 >
-                  {isZh ? '當月營收' : 'Curr revenue'}
+                  {isDaily
+                    ? isZh ? '日均營收' : 'Daily Avg Rev'
+                    : isZh ? '當月營收' : 'Curr revenue'}
                   {renderSortArrow('revenueCurrent')}
                 </th>
                 <th
@@ -370,7 +683,9 @@ export const PlatformMatrix: React.FC<Props> = ({
                   }}
                   onClick={() => handleSort('revenuePrev')}
                 >
-                  {isZh ? '前一月營收' : 'Prev revenue'}
+                  {isDaily
+                    ? isZh ? '前月日均' : 'Prev Daily Rev'
+                    : isZh ? '前一月營收' : 'Prev revenue'}
                   {renderSortArrow('revenuePrev')}
                 </th>
                 <th
@@ -394,7 +709,9 @@ export const PlatformMatrix: React.FC<Props> = ({
                   }}
                   onClick={() => handleSort('ordersCurrent')}
                 >
-                  {isZh ? '當月單量' : 'Curr orders'}
+                  {isDaily
+                    ? isZh ? '日均單量' : 'Daily Avg Orders'
+                    : isZh ? '當月單量' : 'Curr orders'}
                   {renderSortArrow('ordersCurrent')}
                 </th>
                 <th
@@ -435,7 +752,7 @@ export const PlatformMatrix: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map((row) => (
+              {displayRows.map((row) => (
                 <tr
                   key={`${row.region}-${row.store_name}`}
                   style={{ borderBottom: '1px solid #111827' }}
@@ -493,10 +810,9 @@ export const PlatformMatrix: React.FC<Props> = ({
             </tbody>
           </table>
 
-          {/* 近三個月門店長條圖 */}
+          {/* 近六個月門店折線圖 grid */}
           {trendMonths.length > 0 &&
-            sortedTrendSeries.length > 0 &&
-            maxTrendValue > 0 && (
+            displayTrendSeries.length > 0 && (
               <>
                 <div
                   style={{
@@ -505,153 +821,358 @@ export const PlatformMatrix: React.FC<Props> = ({
                     margin: '12px 0 10px',
                   }}
                 />
-                <div style={{ marginBottom: 8 }}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: '#e5e7eb',
-                      marginBottom: 2,
-                    }}
-                  >
-                    {isZh
-                      ? '近三個月門店營收趨勢'
-                      : '3-month store revenue trend'}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                    {isZh ? '平台：' : 'Platform: '}
-                    {platformLabel(platformFilter, isZh)}
-                  </div>
-                </div>
 
+                {/* Section header */}
                 <div
                   style={{
-                    position: 'relative',
-                    height: 190,
-                    padding: '10px 0 12px',
-                    overflowX: 'auto',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-end',
-                      gap: 14,
-                      height: '100%',
-                      paddingRight: 8,
-                    }}
-                  >
-                    {sortedTrendSeries.map((series) => (
-                      <div
-                        key={`${series.region}-${series.store_name}`}
-                        style={{
-                          minWidth: 56,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'flex-end',
-                        }}
-                      >
-                        {/* bars */}
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'flex-end',
-                            gap: 4,
-                            height: 140,
-                          }}
-                        >
-                          {series.values.map((rawV, idx) => {
-                            const v = Number(rawV || 0);
-                            const ratio =
-                              maxTrendValue > 0 ? v / maxTrendValue : 0;
-                            const height = Math.max(4, ratio * 120); // 120px 留空間放標籤
-                            const isLatest = idx === latestIndex;
-                            const rounded = Math.round(v);
-
-                            return (
-                              <div
-                                key={idx}
-                                style={{
-                                  position: 'relative',
-                                  width: 10,
-                                  borderRadius: 9999,
-                                  backgroundColor:
-                                    MONTH_COLORS[idx % MONTH_COLORS.length],
-                                  height,
-                                }}
-                              >
-                                {isLatest && (
-                                  <span
-                                    style={{
-                                      position: 'absolute',
-                                      bottom: height + 4,
-                                      left: '50%',
-                                      transform: 'translateX(-50%)',
-                                      fontSize: 9,
-                                      color: '#e5e7eb',
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {rounded === 0
-                                      ? '0'
-                                      : rounded.toLocaleString()}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div
-                          style={{
-                            marginTop: 4,
-                            fontSize: 10,
-                            color: '#9ca3af',
-                            textAlign: 'center',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {series.store_name}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 月份 legend */}
-                <div
-                  style={{
+                    marginBottom: 8,
                     display: 'flex',
-                    gap: 12,
-                    fontSize: 10,
-                    color: '#9ca3af',
-                    marginTop: 4,
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-end',
+                    gap: 8,
                     flexWrap: 'wrap',
                   }}
                 >
-                  {trendMonths.map((m, idx) => (
+                  <div>
                     <div
-                      key={m}
-                      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                      style={{
+                        fontSize: 12,
+                        color: '#e5e7eb',
+                        marginBottom: 2,
+                      }}
                     >
-                      <span
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 9999,
-                          backgroundColor:
-                            MONTH_COLORS[idx % MONTH_COLORS.length],
-                        }}
-                      />
-                      <span>{monthLabel(m, language)}</span>
+                      {isZh
+                        ? isDaily
+                          ? '近六個月門店日均營收趨勢'
+                          : '近六個月門店營收趨勢'
+                        : isDaily
+                          ? '6-month store daily avg revenue trend'
+                          : '6-month store revenue trend'}
                     </div>
-                  ))}
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                      {isZh ? '平台：' : 'Platform: '}
+                      {platformLabel(platformFilter, isZh)}
+                      {isDaily && (isZh ? ' · 日均' : ' · Daily Avg')}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 10, color: '#6b7280' }}>
+                    {monthLabel(trendMonths[0], language)}
+                    {' — '}
+                    {monthLabel(trendMonths[trendMonths.length - 1], language)}
+                  </div>
                 </div>
-              </>
-            )}
+
+                {/* Grid of mini line charts */}
+                <div className="store-trend-grid">
+                  {displayTrendSeries.map((series) => {
+                    const key = `${series.region}-${series.store_name}`;
+                    return (
+                      <div
+                        key={key}
+                        onClick={() => setHoveredStoreKey(key)}
+                      >
+                        <StoreLineChart
+                          storeName={series.store_name}
+                          values={series.values}
+                          months={trendMonths}
+                          lineColor={highlightColor}
+                          language={language}
+                          valueFormatter={formatCurrency}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Overlay: portal to body so it escapes overflow/stacking contexts */}
+                {hoveredStoreKey != null && (() => {
+                  const s = displayTrendSeries.find(
+                    (ss) => `${ss.region}-${ss.store_name}` === hoveredStoreKey,
+                  );
+                  if (!s) return null;
+                  return createPortal(
+                    <>
+                      <div
+                        className="store-trend-overlay-backdrop"
+                        onClick={() => setHoveredStoreKey(null)}
+                      />
+                      <div
+                        className="store-trend-overlay-card"
+                      >
+                        <StoreLineChart
+                          storeName={s.store_name}
+                          values={s.values}
+                          months={trendMonths}
+                          lineColor={highlightColor}
+                          language={language}
+                          valueFormatter={formatCurrency}
+                        />
+                      </div>
+                    </>,
+                    document.body,
+                  );
+                })()}
+
+                {/* === Current-month platform mix by store（下方堆疊圖） === */}
+               {chunkedPlatformShare.length > 0 && (
+  <>
+    <div
+      style={{
+        height: 1,
+        background: '#111827',
+        margin: '16px 0 10px',
+      }}
+    />
+
+    {/* 標題 + 副標題 + 右上角 Legend */}
+    <div
+      style={{
+        marginBottom: 8,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        gap: 8,
+        flexWrap: 'wrap',
+      }}
+    >
+      <div>
+        <div
+          style={{
+            fontSize: 12,
+            color: '#e5e7eb',
+            marginBottom: 2,
+          }}
+        >
+          {isZh
+            ? '當月平台營收佔比（門店）'
+            : 'Current-month platform mix by store'}
         </div>
-      )}
-    </section>
-  );
-};
+        <div style={{ fontSize: 11, color: '#9ca3af' }}>
+          {isZh
+            ? '每間門店的 Uber / Fantuan / Doordash 營收百分比（加總為 100%）。'
+            : 'Per-store revenue share by Uber / Fantuan / Doordash (sum to 100%).'}
+        </div>
+      </div>
+
+      {/* Platform legend 靠右上 */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 12,
+          fontSize: 10,
+          color: '#9ca3af',
+          flexWrap: 'wrap',
+        }}
+      >
+        {(['UBER', 'Fantuan', 'Doordash'] as const).map((p) => (
+          <div
+            key={p}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 9999,
+                backgroundColor:
+                  PLATFORM_BAR_HIGHLIGHT[p as MatrixPlatformFilter],
+                opacity:
+                  platformFilter === 'ALL' || platformFilter === p ? 1 : 0.35,
+              }}
+            />
+            <span>{p}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {chunkedPlatformShare.map((stores, rowIndex) => (
+      <div
+        key={rowIndex}
+        style={{
+          position: 'relative',
+          padding: '10px 0 18px',
+          overflowX: 'hidden',
+          borderTop: rowIndex > 0 ? '1px dashed #111827' : undefined,
+          marginTop: rowIndex > 0 ? 8 : 0,
+          height: 200,
+        }}
+      >
+        {/* 0% / 50% / 100% grid 線：高度對齊 130px bar 區域 */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 30,   // ⬅ 原本是 10，改成 30 讓高度 = 130
+            right: 0,
+            bottom: 40,
+            left: 40,
+            pointerEvents: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            zIndex: 0,
+          }}
+        >
+          {[1, 0.5, 0].map((r) => (
+            <div
+              key={r}
+              style={{
+                borderTop: '1px solid #111827',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Y 軸線 + 文字（在左側，同樣 top: 30 才會對齊格線） */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 30,   // ⬅ 這裡也從 10 改成 30
+            left: 32,
+            bottom: 40,
+            width: 0,
+            borderLeft: '1px solid #111827',
+            zIndex: 1,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            top: 30,   // ⬅ 同步修改
+            left: 0,
+            bottom: 40,
+            width: 32,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            fontSize: 9,
+            color: '#6b7280',
+            textAlign: 'right',
+            paddingRight: 2,
+            zIndex: 1,
+          }}
+        >
+          <span>100%</span>
+          <span>50%</span>
+          <span>0%</span>
+        </div>
+
+        {/* bars */}
+        {/* bars */}
+<div
+  style={{
+    position: 'relative',
+    zIndex: 1,
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: 16,
+    height: '100%',
+    paddingLeft: 40,
+    paddingBottom: 40, // ★ 讓柱子底部往上 40px，對齊 0% 那條線
+  }}
+>
+
+          {stores.map((store) => (
+            <div
+              key={`${store.region}-${store.store_name}`}
+              style={{
+                minWidth: 40,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+              }}
+            >
+              <div
+                style={{
+                  position: 'relative',
+                  height: 150,
+                  width: 18,
+                  borderRadius: 0,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column-reverse',
+                  backgroundColor: '#020617',
+                  border: '1px solid #111827',
+                }}
+              >
+                {store.shares
+                  .filter((s) => s.share > 0)
+                  .map((s) => {
+                    const baseColor =
+                      PLATFORM_BAR_HIGHLIGHT[
+                        s.platform as MatrixPlatformFilter
+                      ] ?? '#4b5563';
+
+                    const isActive =
+                      platformFilter === 'ALL' ||
+                      platformFilter === s.platform;
+
+                    const labelColor =
+                      s.platform === 'UBER' ? '#e5e7eb' : '#020617';
+
+                    return (
+                      <div
+                        key={s.platform}
+                        style={{
+                          position: 'relative',
+                          height: `${Math.max(s.share * 100, 4)}%`,
+                          backgroundColor: baseColor,
+                          opacity: isActive ? 1 : 0.35,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {s.share >= 0.08 && (
+                          <span
+                            style={{
+                              fontSize: 8,
+                              color: labelColor,
+                              textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                            }}
+                          >
+                            {(s.share * 100).toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {/* 店名 */}
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 10,
+                  color: '#9ca3af',
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {store.store_name}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+  </>
+)}
+
+ </>
+)}
+            </div>
+  
+)}
+      </section>
+    );
+  };
+
 
 
