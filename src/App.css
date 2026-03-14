@@ -1008,6 +1008,7 @@ body {
 .survey-table-expand-content.survey-expand-open {
   max-height: 800px;
   opacity: 1;
+  overflow: visible;
 }
 .survey-expand-inner {
   padding: 16px 20px;
@@ -1039,6 +1040,43 @@ body {
   font-weight: 600;
   color: #d1d5db;
   text-align: center;
+}
+.survey-mini-pie-tooltip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 100%;
+  margin-bottom: 6px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 8px;
+  padding: 10px 14px;
+  z-index: 20;
+  min-width: 180px;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+.survey-mini-pie-tooltip-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a5b4fc;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding-bottom: 4px;
+}
+.survey-mini-pie-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+  color: #d1d5db;
+  line-height: 1.6;
+}
+.survey-mini-pie-tooltip-pct {
+  font-weight: 600;
+  color: #e2e8f0;
+  flex-shrink: 0;
 }
 
 /* Pie chart */
