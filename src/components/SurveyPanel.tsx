@@ -494,6 +494,83 @@ function BadReviewPie({ serviceBad, cleanlinessBad, foodBad, isZh }: {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Mini Pie Chart (generic, for per-store distributions)             */
+/* ------------------------------------------------------------------ */
+
+const HEARD_COLORS = ['#f97316','#fb923c','#fbbf24','#a3e635','#34d399','#22d3ee','#818cf8','#9ca3af'];
+const RACE_COLORS = ['#6366f1','#8b5cf6','#ec4899','#14b8a6','#f59e0b','#ef4444','#3b82f6','#9ca3af'];
+
+function MiniPieChart({ data, title, colors }: {
+  data: [string, number][];
+  title: string;
+  colors: string[];
+}) {
+  const total = data.reduce((s, d) => s + d[1], 0);
+  if (total === 0) {
+    return (
+      <div className="survey-mini-pie-wrap">
+        <h4 className="survey-mini-pie-title">{title}</h4>
+        <div className="survey-pie-empty">No data</div>
+      </div>
+    );
+  }
+
+  const size = 150;
+  const cx = size / 2, cy = size / 2, r = size / 2 - 8;
+  let cumAngle = -Math.PI / 2;
+
+  const paths: React.ReactNode[] = [];
+  const pctLabels: React.ReactNode[] = [];
+
+  data.forEach(([, count], idx) => {
+    if (count === 0) return;
+    const pct = count / total;
+    const angle = pct * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(cumAngle);
+    const y1 = cy + r * Math.sin(cumAngle);
+    const x2 = cx + r * Math.cos(cumAngle + angle);
+    const y2 = cy + r * Math.sin(cumAngle + angle);
+    const largeArc = angle > Math.PI ? 1 : 0;
+
+    paths.push(
+      <path key={idx}
+        d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`}
+        fill={colors[idx % colors.length]} stroke="rgba(2,6,23,0.8)" strokeWidth={2} />
+    );
+
+    if (pct > 0.06) {
+      const midAngle = cumAngle + angle / 2;
+      const lr = r * 0.62;
+      pctLabels.push(
+        <text key={`l${idx}`} x={cx + lr * Math.cos(midAngle)} y={cy + lr * Math.sin(midAngle)}
+          textAnchor="middle" dominantBaseline="central"
+          fill="#fff" fontSize={10} fontWeight={600}>
+          {(pct * 100).toFixed(0)}%
+        </text>
+      );
+    }
+    cumAngle += angle;
+  });
+
+  return (
+    <div className="survey-mini-pie-wrap">
+      <h4 className="survey-mini-pie-title">{title}</h4>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {paths}{pctLabels}
+      </svg>
+      <div className="survey-pie-legend">
+        {data.map(([label, count], i) => (
+          <div key={i} className="survey-pie-legend-item">
+            <span className="survey-pie-legend-dot" style={{ background: colors[i % colors.length] }} />
+            <span className="survey-pie-legend-label">{label}: {count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Collapsible Section wrapper                                       */
 /* ------------------------------------------------------------------ */
 
@@ -787,16 +864,32 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendG
                       <tr className="survey-table-expand-row">
                         <td colSpan={5}>
                           <div className={`survey-table-expand-content ${selectedStore === s.storeName ? 'survey-expand-open' : ''}`}>
-                            <div className="survey-expand-inner">
-                              <h3 className="survey-section-subtitle" style={{ margin: '0 0 8px' }}>
-                                {isZh ? `${s.storeName} 差評原因分析` : `${s.storeName} — Bad Review Analysis`}
-                              </h3>
-                              <BadReviewPie
-                                serviceBad={s.serviceBad}
-                                cleanlinessBad={s.cleanlinessBad}
-                                foodBad={s.foodBad}
-                                isZh={isZh}
-                              />
+                            <div className="survey-expand-inner survey-expand-row-layout">
+                              <div className="survey-expand-col">
+                                <h4 className="survey-mini-pie-title">
+                                  {isZh ? '差評原因分析' : 'Bad Review Analysis'}
+                                </h4>
+                                <BadReviewPie
+                                  serviceBad={s.serviceBad}
+                                  cleanlinessBad={s.cleanlinessBad}
+                                  foodBad={s.foodBad}
+                                  isZh={isZh}
+                                />
+                              </div>
+                              <div className="survey-expand-col">
+                                <MiniPieChart
+                                  data={s.heardFromDist}
+                                  title={isZh ? '怎麼知道我們' : 'How They Found Us'}
+                                  colors={HEARD_COLORS}
+                                />
+                              </div>
+                              <div className="survey-expand-col">
+                                <MiniPieChart
+                                  data={s.raceDist}
+                                  title={isZh ? '族群分布' : 'Ethnicity'}
+                                  colors={RACE_COLORS}
+                                />
+                              </div>
                             </div>
                           </div>
                         </td>
