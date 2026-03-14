@@ -119,6 +119,8 @@ const STORE_NAME_MAP: Record<string, string> = {
   'by uvic': 'UVic',
   'gilmore, uvic': 'UVic',
   'olympic village': 'Olympic Village',
+  'north vancouver': 'North Vancouver',
+  'west end': 'West End',
 };
 
 /** Store names to hide from the dashboard */
@@ -142,14 +144,12 @@ const STORE_BLACKLIST = new Set([
   'gabrielle zhong',
   'bryan tai',
   'lonsdale',
-  'north vancouver',
   'langford',
   'downtown vancouver',
   'downtown, vancouver',
   'north van',
   'maple ridge',
   'victory',
-  'west end',
   'the one on 41st',
   'the best richmond kimchi!<3',
   'howe st (vancouver)',
