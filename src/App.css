@@ -717,3 +717,250 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ==============================
+   Survey Panel Styles
+   ============================== */
+
+.survey-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Upload section */
+.survey-upload-section {
+  padding: 20px 24px;
+}
+
+.survey-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e5e7eb;
+  margin: 0 0 4px;
+}
+
+.survey-section-subtitle {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0 0 16px;
+}
+
+.survey-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.survey-upload-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px dashed rgba(55, 65, 81, 0.8);
+  transition: border-color 0.2s;
+}
+
+.survey-upload-card:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.survey-upload-region {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e5e7eb;
+  letter-spacing: 1px;
+}
+
+.survey-upload-btn {
+  padding: 6px 18px;
+  border-radius: 9999px;
+  border: 1px solid #374151;
+  background: rgba(37, 99, 235, 0.15);
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.survey-upload-btn:hover {
+  background: rgba(37, 99, 235, 0.3);
+}
+
+.survey-upload-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.survey-upload-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.survey-upload-success {
+  color: #4ade80;
+}
+
+.survey-upload-skip {
+  color: #fbbf24;
+}
+
+.survey-upload-error {
+  color: #f87171;
+}
+
+/* KPI row */
+.survey-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.survey-kpi-card {
+  text-align: center;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.survey-kpi-card.survey-kpi-bad {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.survey-kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #e5e7eb;
+  font-variant-numeric: tabular-nums;
+}
+
+.survey-kpi-bad .survey-kpi-value {
+  color: #f87171;
+}
+
+.survey-kpi-label {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+/* Two-column analysis layout */
+.survey-analysis-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .survey-analysis-grid {
+    grid-template-columns: 1fr;
+  }
+  .survey-upload-grid {
+    grid-template-columns: 1fr;
+  }
+  .survey-kpi-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Survey table */
+.survey-table-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.survey-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.survey-table th {
+  text-align: left;
+  padding: 8px 12px;
+  color: #9ca3af;
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(55, 65, 81, 0.5);
+}
+
+.survey-table td {
+  padding: 8px 12px;
+  color: #e5e7eb;
+  border-bottom: 1px solid rgba(55, 65, 81, 0.25);
+}
+
+.survey-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.survey-table tbody tr:hover {
+  background: rgba(55, 65, 81, 0.25);
+}
+
+.survey-table-row-active {
+  background: rgba(99, 102, 241, 0.15) !important;
+  border-left: 3px solid #6366f1;
+}
+
+.survey-table-store {
+  font-weight: 500;
+}
+
+.survey-table-bad {
+  color: #f87171;
+  font-weight: 600;
+}
+
+/* Pie chart */
+.survey-pie-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.survey-pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.survey-pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #d1d5db;
+}
+
+.survey-pie-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.survey-pie-legend-label {
+  font-variant-numeric: tabular-nums;
+}
+
+.survey-pie-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+}
+

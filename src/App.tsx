@@ -5,6 +5,7 @@ import { useDashboardData } from './hooks/useDashboardData';
 import { ExecutiveSummary } from './components/ExecutiveSummary';
 import { PlatformMatrix } from './components/PlatformMatrix';
 import { UberAdsPanel } from './components/UberAdsPanel';
+import { SurveyPanel } from './components/SurveyPanel';
 import { useTotalRevenue } from './hooks/useTotalRevenue';
 
 // ⭐ Supabase Auth
@@ -13,7 +14,7 @@ import { supabase } from './lib/supabaseClient';
 
 export type Lang = 'en' | 'zh';
 export type Scope = 'BC' | 'ON' | 'CA';
-type RoleScope = Scope | 'ALL';
+type RoleScope = Scope | 'ALL' | 'MKT';
 
 function App() {
   // ===== Auth 狀態 =====
@@ -32,13 +33,14 @@ function App() {
 
   // 允許看到哪些 Region（依角色）
   const effectiveRole: RoleScope = role ?? 'ALL';
+  const isMkt = effectiveRole === 'MKT';
   const allowedRegions: Scope[] =
-    effectiveRole === 'ALL' ? ['BC', 'ON', 'CA'] : [effectiveRole];
+    effectiveRole === 'ALL' || isMkt ? ['BC', 'ON', 'CA'] : [effectiveRole];
 
-  // 角色一旦變成 BC/ON/CA，就強制鎖定 Region
+  // 角色一旦變成 BC/ON/CA，就強制鎖定 Region（MKT 和 ALL 不鎖定）
   useEffect(() => {
-    if (effectiveRole !== 'ALL' && selectedRegion !== effectiveRole) {
-      setSelectedRegion(effectiveRole);
+    if (effectiveRole !== 'ALL' && effectiveRole !== 'MKT' && selectedRegion !== effectiveRole) {
+      setSelectedRegion(effectiveRole as Scope);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveRole]);
@@ -69,10 +71,14 @@ function App() {
   const [language, setLanguage] = useState<Lang>('en');
   const isZh = language === 'zh';
 
-  const title = isZh ? 'Big Way 外送數據儀表板' : 'Big Way Delivery Performance Dashboard';
-  const subtitle = isZh
-    ? 'BC / CA / ON 外送平台的整體表現總覽'
-    : 'Strategic dashboard for BC / CA / ON delivery performance.';
+  const title = isMkt
+    ? (isZh ? 'Big Way 問卷回饋分析' : 'Big Way Survey Feedback')
+    : (isZh ? 'Big Way 外送數據儀表板' : 'Big Way Delivery Performance Dashboard');
+  const subtitle = isMkt
+    ? (isZh ? 'BC / CA / ON 門店客人問卷統計' : 'Dine-in customer survey analytics for BC / CA / ON')
+    : isZh
+      ? 'BC / CA / ON 外送平台的整體表現總覽'
+      : 'Strategic dashboard for BC / CA / ON delivery performance.';
   const metaText = isZh
     ? '資料來源 · Supabase · 自動更新'
     : 'Data source · Supabase · Auto-refreshed';
@@ -95,19 +101,24 @@ function App() {
 
       if (currentSession?.user) {
         const { user } = currentSession;
-        const { data: roleRow, error: roleErr } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .maybeSingle();
 
-        if (roleErr) {
-          setAuthError(roleErr.message);
-        } else if (roleRow?.role) {
-          setRole(roleRow.role as RoleScope);
+        // MKT 帳號直接設定角色
+        if (user.email === 'mkt@dashboard.internal') {
+          setRole('MKT');
         } else {
-          // 若沒找到，就當 ALL（COO 等級）
-          setRole('ALL');
+          const { data: roleRow, error: roleErr } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (roleErr) {
+            setAuthError(roleErr.message);
+          } else if (roleRow?.role) {
+            setRole(roleRow.role as RoleScope);
+          } else {
+            setRole('ALL');
+          }
         }
       }
 
@@ -131,6 +142,19 @@ function App() {
           : 'Please enter account code (bc / on / ca / all).',
       );
       setAuthLoading(false);
+      return;
+    }
+
+    // MKT 帳號：不走 Supabase auth，直接前端驗證
+    if (trimmed === 'mkt') {
+      if (password === 'bwmkt2026') {
+        setRole('MKT');
+        setSession({} as Session); // placeholder so UI shows logged-in
+        setAuthLoading(false);
+      } else {
+        setAuthError(isZh ? '密碼錯誤' : 'Invalid login credentials');
+        setAuthLoading(false);
+      }
       return;
     }
 
@@ -170,7 +194,7 @@ function App() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    if (!isMkt) await supabase.auth.signOut();
     setSession(null);
     setRole(null);
     setAccountCode('');
@@ -380,7 +404,9 @@ const prevSelectableMonth = useMemo(() => {
         <header className="app-header">
           <div>
             <p className="app-badge">
-              {isZh ? 'FOOD DELIVERY · 內部' : 'FOOD DELIVERY · INTERNAL'}
+              {isMkt
+                ? (isZh ? 'SURVEY · 內部' : 'SURVEY · INTERNAL')
+                : (isZh ? 'FOOD DELIVERY · 內部' : 'FOOD DELIVERY · INTERNAL')}
             </p>
             <h1 className="app-title">{title}</h1>
             <p className="app-subtitle">{subtitle}</p>
@@ -430,129 +456,155 @@ const prevSelectableMonth = useMemo(() => {
           </div>
         </header>
 
-        {/* ===== Global Filters ===== */}
-        {!loading && !error && allMonths.length > 0 && (
-          <div className="filter-bar">
-            <div className="filter-group">
-              <span className="filter-label">{isZh ? '區域' : 'Region'}</span>
-              <div className="scope-toggle">
-                {(['BC', 'ON', 'CA'] as Scope[]).map((region) => {
-                  const disabled = !allowedRegions.includes(region);
-                  return (
+        {/* ===== MKT: Survey Page ===== */}
+        {isMkt && (
+          <>
+            {/* Region filter only for MKT */}
+            <div className="filter-bar">
+              <div className="filter-group">
+                <span className="filter-label">{isZh ? '區域' : 'Region'}</span>
+                <div className="scope-toggle">
+                  {(['BC', 'ON', 'CA'] as Scope[]).map((region) => (
                     <button
                       key={region}
                       type="button"
                       className={
                         'scope-pill' +
-                        (selectedRegion === region ? ' scope-pill-active' : '') +
-                        (disabled ? ' scope-pill-disabled' : '')
+                        (selectedRegion === region ? ' scope-pill-active' : '')
                       }
-                      onClick={() => {
-                        if (!disabled) setSelectedRegion(region);
-                      }}
-                      disabled={disabled}
+                      onClick={() => setSelectedRegion(region)}
                     >
                       {region}
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             </div>
+            <SurveyPanel language={language} selectedRegion={selectedRegion} />
+          </>
+        )}
 
-            <div className="filter-group">
-              <span className="filter-label">
-                {isZh ? '分析月份' : 'Analysis month'}
-              </span>
-              <select
-                className="filter-select"
-                value={selectedMonth ?? ''}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-              >
-                {allMonths.map((m) => (
-                  <option key={m} value={m}>
-                    {monthLabel(m)}
-                  </option>
-                ))}
-              </select>
-              {prevSelectableMonth && (
-                <span className="filter-hint">
-                  {isZh ? '對比' : 'vs'} {monthLabel(prevSelectableMonth)}
-                </span>
+        {/* ===== Dashboard (non-MKT roles) ===== */}
+        {!isMkt && (
+          <>
+            {/* Global Filters */}
+            {!loading && !error && allMonths.length > 0 && (
+              <div className="filter-bar">
+                <div className="filter-group">
+                  <span className="filter-label">{isZh ? '區域' : 'Region'}</span>
+                  <div className="scope-toggle">
+                    {(['BC', 'ON', 'CA'] as Scope[]).map((region) => {
+                      const disabled = !allowedRegions.includes(region);
+                      return (
+                        <button
+                          key={region}
+                          type="button"
+                          className={
+                            'scope-pill' +
+                            (selectedRegion === region ? ' scope-pill-active' : '') +
+                            (disabled ? ' scope-pill-disabled' : '')
+                          }
+                          onClick={() => {
+                            if (!disabled) setSelectedRegion(region);
+                          }}
+                          disabled={disabled}
+                        >
+                          {region}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="filter-group">
+                  <span className="filter-label">
+                    {isZh ? '分析月份' : 'Analysis month'}
+                  </span>
+                  <select
+                    className="filter-select"
+                    value={selectedMonth ?? ''}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                  >
+                    {allMonths.map((m) => (
+                      <option key={m} value={m}>
+                        {monthLabel(m)}
+                      </option>
+                    ))}
+                  </select>
+                  {prevSelectableMonth && (
+                    <span className="filter-hint">
+                      {isZh ? '對比' : 'vs'} {monthLabel(prevSelectableMonth)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Loading / Error */}
+            {loading && (
+              <div className="status status-loading">
+                {isZh ? '資料載入中…' : 'Loading data…'}
+              </div>
+            )}
+
+            {error && (
+              <div className="status status-error">
+                {isZh ? '載入資料發生錯誤：' : 'Error loading data: '}
+                {error}
+              </div>
+            )}
+
+            {/* Main Dashboard */}
+            {!loading &&
+              !error &&
+              revenueKpi &&
+              ordersKpi &&
+              aovKpi &&
+              selectedMonth && (
+                <main className="dashboard-grid">
+                  <section className="section-card section-kpi">
+                    <ExecutiveSummary
+                      language={language}
+                      selectedRegion={selectedRegion}
+                      selectedMonth={selectedMonth}
+                      currentMonth={currentMonth}
+                      prevMonth={prevMonth}
+                      revenueKpi={revenueKpi}
+                      ordersKpi={ordersKpi}
+                      aovKpi={aovKpi}
+                      regionalRevenueKpis={regionalRevenueKpis}
+                      regionalOrdersKpis={regionalOrdersKpis}
+                      regionalAovKpis={regionalAovKpis}
+                      platformRevenueKpis={platformRevenueKpis}
+                      platformOrdersKpis={platformOrdersKpis}
+                      platformAovKpis={platformAovKpis}
+                      allMonths={allMonths}
+                      rawRows={rawRows}
+                      totalBusinessRevenue={totalBusinessRevenue}
+                      totalBusinessRevenueLoading={totalRevenueLoading}
+                    />
+                  </section>
+
+                  <section className="section-card">
+                    <PlatformMatrix
+                      language={language}
+                      selectedRegion={selectedRegion}
+                      selectedMonth={selectedMonth}
+                    />
+                  </section>
+
+                  <section className="section-card">
+                    <UberAdsPanel
+                      language={language}
+                      selectedRegion={selectedRegion}
+                      currentMonthIso={selectedMonth}
+                      prevMonthIso={prevSelectableMonth}
+                    />
+                  </section>
+                </main>
               )}
-            </div>
-          </div>
+          </>
         )}
-
-        {/* ===== Loading / Error ===== */}
-        {loading && (
-          <div className="status status-loading">
-            {isZh ? '資料載入中…' : 'Loading data…'}
-          </div>
-        )}
-
-        {error && (
-          <div className="status status-error">
-            {isZh ? '載入資料發生錯誤：' : 'Error loading data: '}
-            {error}
-          </div>
-        )}
-
-        {/* ===== Main Dashboard ===== */}
-        {!loading &&
-          !error &&
-          revenueKpi &&
-          ordersKpi &&
-          aovKpi &&
-          selectedMonth && (
-            <main className="dashboard-grid">
-              {/* 1️⃣ KPI + Regional / Platform summary */}
-              <section className="section-card section-kpi">
-                <ExecutiveSummary
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                  currentMonth={currentMonth}
-                  prevMonth={prevMonth}
-                  revenueKpi={revenueKpi}
-                  ordersKpi={ordersKpi}
-                  aovKpi={aovKpi}
-                  regionalRevenueKpis={regionalRevenueKpis}
-                  regionalOrdersKpis={regionalOrdersKpis}
-                  regionalAovKpis={regionalAovKpis}
-                  platformRevenueKpis={platformRevenueKpis}
-                  platformOrdersKpis={platformOrdersKpis}
-                  platformAovKpis={platformAovKpis}
-                  allMonths={allMonths}
-                  rawRows={rawRows}
-                  totalBusinessRevenue={totalBusinessRevenue}
-                  totalBusinessRevenueLoading={totalRevenueLoading}
-                />
-              </section>
-
-              {/* 2️⃣ Platform Velocity Matrix */}
-              <section className="section-card">
-                <PlatformMatrix
-                  language={language}
-                  selectedRegion={selectedRegion}
-                  selectedMonth={selectedMonth}
-                />
-              </section>
-
-              {/* 3️⃣ Uber Ads Metrics Panel */}
-        {/* 3️⃣ Uber Ads Metrics Panel */}
-<section className="section-card">
-  <UberAdsPanel
-    language={language}
-    selectedRegion={selectedRegion}
-    // ★ 一律用「Analysis month 下拉」的值
-    currentMonthIso={selectedMonth}
-    // ★ 對比月份 = 下拉月份的上一個月
-    prevMonthIso={prevSelectableMonth}
-  />
-</section>
-
-            </main>
-          )}
       </div>
     </div>
   );
