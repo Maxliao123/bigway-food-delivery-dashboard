@@ -160,8 +160,10 @@ function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: bo
   const maxResp = Math.max(...data.map(d => d.responses), 1);
   const maxRate = Math.max(...data.map(d => d.badRate), 0.01);
 
-  const barW = Math.min(cw / data.length * 0.6, 40);
-  const getX = (i: number) => margin.left + (data.length === 1 ? cw / 2 : (cw / (data.length - 1)) * i);
+  const pad = 30; // inner padding so bars don't overlap axis labels
+  const plotW = cw - pad * 2;
+  const barW = Math.min(plotW / data.length * 0.6, 40);
+  const getX = (i: number) => margin.left + pad + (data.length === 1 ? plotW / 2 : (plotW / (data.length - 1)) * i);
   const getYL = (v: number) => margin.top + ch - (v / maxResp) * ch;
   const getYR = (v: number) => margin.top + ch - (v / maxRate) * ch;
 
