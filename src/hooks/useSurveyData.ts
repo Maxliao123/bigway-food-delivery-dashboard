@@ -58,9 +58,15 @@ export interface AvgScores {
   food: number;
 }
 
+export interface DemographicItem {
+  label: string;
+  value: number;
+  breakdown?: [string, number][]; // sub-categories sorted desc
+}
+
 export interface DemographicData {
-  heardFrom: [string, number][];
-  visitFrequency: [string, number][];
+  heardFrom: DemographicItem[];
+  visitFrequency: DemographicItem[];
 }
 
 export interface TextFeedbackItem {
@@ -457,13 +463,19 @@ const MAX_DEMOGRAPHIC_ITEMS = 8;
 
 /** Demographics: heard_from + visit_frequency distributions */
 export function computeDemographics(data: SurveyRow[]): DemographicData {
-  const heardMap = new Map<string, number>();
+  // Track category totals AND raw sub-categories
+  const heardCatMap = new Map<string, number>();
+  const heardSubMap = new Map<string, Map<string, number>>();
   const freqMap = new Map<string, number>();
 
   for (const row of data) {
     if (row.heard_from) {
-      const category = categorizeHeardFrom(row.heard_from);
-      heardMap.set(category, (heardMap.get(category) ?? 0) + 1);
+      const raw = row.heard_from.trim();
+      const category = categorizeHeardFrom(raw);
+      heardCatMap.set(category, (heardCatMap.get(category) ?? 0) + 1);
+      if (!heardSubMap.has(category)) heardSubMap.set(category, new Map());
+      const sub = heardSubMap.get(category)!;
+      sub.set(raw, (sub.get(raw) ?? 0) + 1);
     }
     if (row.visit_frequency) {
       const v = row.visit_frequency.trim();
@@ -471,23 +483,45 @@ export function computeDemographics(data: SurveyRow[]): DemographicData {
     }
   }
 
-  // Limit heard_from to top N, merge rest into "Other"
-  let heardEntries = [...heardMap.entries()].sort((a, b) => b[1] - a[1]);
-  if (heardEntries.length > MAX_DEMOGRAPHIC_ITEMS) {
-    const top = heardEntries.slice(0, MAX_DEMOGRAPHIC_ITEMS - 1);
-    const otherSum = heardEntries.slice(MAX_DEMOGRAPHIC_ITEMS - 1).reduce((sum, e) => sum + e[1], 0);
-    const existingOther = top.find(e => e[0] === 'Other');
-    if (existingOther) {
-      existingOther[1] += otherSum;
-    } else {
-      top.push(['Other', otherSum]);
+  // Build heard items with breakdown
+  let heardItems: DemographicItem[] = [...heardCatMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, value]) => {
+      const sub = heardSubMap.get(label);
+      const breakdown = sub && sub.size > 1
+        ? [...sub.entries()].sort((a, b) => b[1] - a[1])
+        : undefined;
+      return { label, value, breakdown };
+    });
+
+  // Limit to top N, merge rest into "Other"
+  if (heardItems.length > MAX_DEMOGRAPHIC_ITEMS) {
+    const top = heardItems.slice(0, MAX_DEMOGRAPHIC_ITEMS - 1);
+    const rest = heardItems.slice(MAX_DEMOGRAPHIC_ITEMS - 1);
+    const otherSum = rest.reduce((s, e) => s + e.value, 0);
+    const otherBreakdown: [string, number][] = [];
+    for (const item of rest) {
+      if (item.breakdown) otherBreakdown.push(...item.breakdown);
+      else otherBreakdown.push([item.label, item.value]);
     }
-    heardEntries = top.sort((a, b) => b[1] - a[1]);
+    otherBreakdown.sort((a, b) => b[1] - a[1]);
+
+    const existingOther = top.find(e => e.label === 'Other');
+    if (existingOther) {
+      if (existingOther.breakdown) otherBreakdown.push(...existingOther.breakdown);
+      existingOther.value += otherSum;
+      existingOther.breakdown = otherBreakdown.sort((a, b) => b[1] - a[1]);
+    } else {
+      top.push({ label: 'Other', value: otherSum, breakdown: otherBreakdown });
+    }
+    heardItems = top.sort((a, b) => b.value - a.value);
   }
 
   return {
-    heardFrom: heardEntries,
-    visitFrequency: [...freqMap.entries()].sort((a, b) => b[1] - a[1]),
+    heardFrom: heardItems,
+    visitFrequency: [...freqMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, value]) => ({ label, value })),
   };
 }
 

@@ -7,7 +7,7 @@ import {
   computeStoreStats, computeMonthlyTrend, computeAvgScores,
   computeDemographics, collectTextFeedback, computeTrend,
 } from '../hooks/useSurveyData';
-import type { StoreStats, MonthlyTrendPoint, TextFeedbackItem, TrendGranularity, TrendPoint } from '../hooks/useSurveyData';
+import type { StoreStats, MonthlyTrendPoint, TextFeedbackItem, TrendGranularity, TrendPoint, DemographicItem } from '../hooks/useSurveyData';
 
 /* ------------------------------------------------------------------ */
 /*  CSV → Supabase helpers                                            */
@@ -368,26 +368,44 @@ function TrendChart({ data, granularity, isZh }: { data: TrendPoint[]; granulari
 /* ------------------------------------------------------------------ */
 
 function HBarChart({ items, maxValue, color, isZh: _isZh }: {
-  items: { label: string; value: number }[];
+  items: DemographicItem[];
   maxValue?: number;
   color?: string;
   isZh: boolean;
 }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
   const max = maxValue ?? Math.max(...items.map(i => i.value), 1);
   return (
     <div className="survey-hbar-list">
       {items.map((item, i) => (
-        <div key={i} className="survey-hbar-row">
-          <span className="survey-hbar-label">{item.label}</span>
-          <div className="survey-hbar-track">
-            <div className="survey-hbar-fill"
-              style={{
-                width: `${max > 0 ? (item.value / max) * 100 : 0}%`,
-                background: color ?? '#6366f1',
-              }} />
+        <React.Fragment key={i}>
+          <div
+            className={`survey-hbar-row${item.breakdown ? ' survey-hbar-expandable' : ''}`}
+            onClick={item.breakdown ? () => setExpanded(expanded === item.label ? null : item.label) : undefined}
+          >
+            {item.breakdown && (
+              <span className="survey-hbar-arrow">{expanded === item.label ? '▾' : '▸'}</span>
+            )}
+            <span className="survey-hbar-label" style={item.breakdown ? undefined : { marginLeft: 16 }}>{item.label}</span>
+            <div className="survey-hbar-track">
+              <div className="survey-hbar-fill"
+                style={{
+                  width: `${max > 0 ? (item.value / max) * 100 : 0}%`,
+                  background: color ?? '#6366f1',
+                }} />
+            </div>
+            <span className="survey-hbar-value">{item.value}</span>
           </div>
-          <span className="survey-hbar-value">{item.value}</span>
-        </div>
+          {item.breakdown && expanded === item.label && (
+            <div className="survey-hbar-breakdown-inline">
+              {item.breakdown.slice(0, 5).map(([sub, count], j) => (
+                <span key={j} className="survey-hbar-chip">
+                  {sub} <strong>{(count / item.value * 100).toFixed(0)}%</strong>
+                </span>
+              ))}
+            </div>
+          )}
+        </React.Fragment>
       ))}
     </div>
   );
@@ -805,7 +823,7 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendG
                   {isZh ? '從何處得知我們' : 'How did you hear about us?'}
                 </h3>
                 <HBarChart
-                  items={demographics.heardFrom.map(([label, value]) => ({ label, value }))}
+                  items={demographics.heardFrom}
                   isZh={isZh}
                 />
               </div>
@@ -814,7 +832,7 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendG
                   {isZh ? '來店頻率' : 'Visit Frequency'}
                 </h3>
                 <HBarChart
-                  items={demographics.visitFrequency.map(([label, value]) => ({ label, value }))}
+                  items={demographics.visitFrequency}
                   isZh={isZh}
                   color="#8b5cf6"
                 />
