@@ -33,6 +33,8 @@ export interface StoreStats {
   avgService: number;
   avgCleanliness: number;
   avgFood: number;
+  heardFromDist: [string, number][];
+  raceDist: [string, number][];
 }
 
 export interface MonthlyTrendPoint {
@@ -252,6 +254,8 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
     sumService: number; cntService: number;
     sumClean: number; cntClean: number;
     sumFood: number; cntFood: number;
+    heardFrom: Map<string, number>;
+    race: Map<string, number>;
   }>();
 
   for (const row of data) {
@@ -272,6 +276,7 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
           total: 0, bad: 0, serviceBad: 0, cleanlinessBad: 0, foodBad: 0,
           sumOverall: 0, cntOverall: 0, sumService: 0, cntService: 0,
           sumClean: 0, cntClean: 0, sumFood: 0, cntFood: 0,
+          heardFrom: new Map(), race: new Map(),
         };
         map.set(store, s);
       }
@@ -288,11 +293,40 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
         if (row.rating_cleanliness != null && row.rating_cleanliness <= 3) s.cleanlinessBad++;
         if (row.rating_food != null && row.rating_food <= 3) s.foodBad++;
       }
+
+      // Heard from
+      if (row.heard_from) {
+        const cat = categorizeHeardFrom(row.heard_from);
+        s.heardFrom.set(cat, (s.heardFrom.get(cat) || 0) + 1);
+      }
+      // Race demographic
+      if (row.race_demographic) {
+        const race = row.race_demographic.trim();
+        if (race && race !== '-' && race.toLowerCase() !== 'n/a') {
+          s.race.set(race, (s.race.get(race) || 0) + 1);
+        }
+      }
     }
   }
 
   const result: StoreStats[] = [];
   for (const [storeName, s] of map) {
+    // Build sorted distributions, top 6 + Other
+    const buildDist = (m: Map<string, number>): [string, number][] => {
+      const sorted = [...m.entries()].sort((a, b) => b[1] - a[1]);
+      if (sorted.length <= 7) return sorted;
+      const top = sorted.slice(0, 6);
+      const otherCount = sorted.slice(6).reduce((sum, e) => sum + e[1], 0);
+      // Merge into existing "Other" if present
+      const existingOther = top.findIndex(e => e[0] === 'Other');
+      if (existingOther >= 0) {
+        top[existingOther] = ['Other', top[existingOther][1] + otherCount];
+      } else {
+        top.push(['Other', otherCount]);
+      }
+      return top;
+    };
+
     result.push({
       storeName,
       totalResponses: s.total,
@@ -305,6 +339,8 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
       avgService: s.cntService > 0 ? s.sumService / s.cntService : 0,
       avgCleanliness: s.cntClean > 0 ? s.sumClean / s.cntClean : 0,
       avgFood: s.cntFood > 0 ? s.sumFood / s.cntFood : 0,
+      heardFromDist: buildDist(s.heardFrom),
+      raceDist: buildDist(s.race),
     });
   }
 
