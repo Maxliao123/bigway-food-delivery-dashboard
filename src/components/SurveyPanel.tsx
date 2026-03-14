@@ -459,22 +459,6 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
   // Per-store drill-down
   const [selectedStore, setSelectedStore] = useState<string | null>(null);
 
-  const drillBadData = useMemo(() => {
-    if (!selectedStore) {
-      return { svc: 0, clean: 0, food: 0, total: totalBadReviews };
-    }
-    const s = storeStats.find(st => st.storeName === selectedStore);
-    if (!s) return { svc: 0, clean: 0, food: 0, total: 0 };
-    return { svc: s.serviceBad, clean: s.cleanlinessBad, food: s.foodBad, total: s.badReviews };
-  }, [selectedStore, storeStats, totalBadReviews]);
-
-  // Aggregate bad review reasons across all stores
-  const aggBadReasons = useMemo(() => {
-    let svc = 0, clean = 0, food = 0;
-    for (const s of storeStats) { svc += s.serviceBad; clean += s.cleanlinessBad; food += s.foodBad; }
-    return { svc, clean, food };
-  }, [storeStats]);
-
   // Text feedback display limit
   const [showAllBad, setShowAllBad] = useState(false);
   const [showAllPositive, setShowAllPositive] = useState(false);
@@ -542,80 +526,94 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
       {!loading && !error && (
         <>
           {/* ===== 1. KPI Summary ===== */}
-          <section className="section-card">
-            <div className="survey-kpi-row">
-              <div className="survey-kpi-card">
-                <div className="survey-kpi-value">{totalResponses}</div>
-                <div className="survey-kpi-label">{isZh ? '總回覆數' : 'Total Responses'}</div>
-              </div>
-              <div className="survey-kpi-card survey-kpi-bad">
-                <div className="survey-kpi-value">{totalBadReviews}</div>
-                <div className="survey-kpi-label">{isZh ? '差評數 (≤3分)' : 'Bad Reviews (≤3)'}</div>
-              </div>
-              <div className="survey-kpi-card">
-                <div className="survey-kpi-value">
-                  {totalResponses > 0 ? ((totalBadReviews / totalResponses) * 100).toFixed(1) + '%' : '—'}
-                </div>
-                <div className="survey-kpi-label">{isZh ? '差評率' : 'Bad Review Rate'}</div>
-              </div>
+          <div className="survey-kpi-grid survey-kpi-grid-3">
+            <div className="survey-kpi-card-standalone">
+              <div className="survey-kpi-value">{totalResponses}</div>
+              <div className="survey-kpi-label">{isZh ? '總回覆數' : 'Total Responses'}</div>
             </div>
-            <div className="survey-kpi-row survey-kpi-row-scores">
-              {([
-                { label: isZh ? '整體平均' : 'Overall Avg', value: avgScores.overall },
-                { label: isZh ? '服務平均' : 'Service Avg', value: avgScores.service },
-                { label: isZh ? '衛生平均' : 'Cleanliness Avg', value: avgScores.cleanliness },
-                { label: isZh ? '食物平均' : 'Food Avg', value: avgScores.food },
-              ] as const).map((item, i) => (
-                <div key={i} className="survey-kpi-card">
-                  <div className="survey-kpi-value" style={{ color: item.value > 0 ? scoreColor(item.value) : undefined }}>
-                    {item.value > 0 ? item.value.toFixed(1) : '—'}
-                    {item.value > 0 && <span className="survey-kpi-of5"> / 5</span>}
-                  </div>
-                  <div className="survey-kpi-label">{item.label}</div>
-                </div>
-              ))}
+            <div className="survey-kpi-card-standalone survey-kpi-card-bad">
+              <div className="survey-kpi-value">{totalBadReviews}</div>
+              <div className="survey-kpi-label">{isZh ? '差評數 (≤3分)' : 'Bad Reviews (≤3)'}</div>
             </div>
-          </section>
+            <div className="survey-kpi-card-standalone">
+              <div className="survey-kpi-value">
+                {totalResponses > 0 ? ((totalBadReviews / totalResponses) * 100).toFixed(1) + '%' : '—'}
+              </div>
+              <div className="survey-kpi-label">{isZh ? '差評率' : 'Bad Review Rate'}</div>
+            </div>
+          </div>
+          <div className="survey-kpi-grid survey-kpi-grid-4">
+            {([
+              { label: isZh ? '整體平均' : 'Overall Avg', value: avgScores.overall },
+              { label: isZh ? '服務平均' : 'Service Avg', value: avgScores.service },
+              { label: isZh ? '衛生平均' : 'Cleanliness Avg', value: avgScores.cleanliness },
+              { label: isZh ? '食物平均' : 'Food Avg', value: avgScores.food },
+            ] as const).map((item, i) => (
+              <div key={i} className="survey-kpi-card-standalone">
+                <div className="survey-kpi-value" style={{ color: item.value > 0 ? scoreColor(item.value) : undefined }}>
+                  {item.value > 0 ? item.value.toFixed(1) : '—'}
+                  {item.value > 0 && <span className="survey-kpi-of5"> / 5</span>}
+                </div>
+                <div className="survey-kpi-label">{item.label}</div>
+              </div>
+            ))}
+          </div>
 
           {/* ===== 2. Monthly Trend ===== */}
           {monthlyTrend.length > 1 && (
             <section className="section-card">
               <h2 className="survey-section-title">{isZh ? '月度趨勢' : 'Monthly Trend'}</h2>
+              <p className="survey-section-subtitle">
+                {isZh
+                  ? '追蹤每月回覆量與差評率的變化，快速發現服務品質波動'
+                  : 'Track monthly response volume and bad review rate to spot quality trends'}
+              </p>
               <MonthlyTrendChart data={monthlyTrend} isZh={isZh} />
             </section>
           )}
 
-          {/* ===== 3. Store Table + 4. Bad Review Analysis ===== */}
-          <div className="survey-analysis-grid">
-            <section className="section-card">
-              <h2 className="survey-section-title">{isZh ? '門店排行' : 'Store Ranking'}</h2>
-              <div className="survey-table-wrap">
-                <table className="survey-table">
-                  <thead>
-                    <tr>
-                      <th className="survey-th-sortable" onClick={() => handleSort('storeName')}>
-                        {isZh ? '門店' : 'Store'}{sortArrow('storeName')}
-                      </th>
-                      <th className="survey-th-sortable" onClick={() => handleSort('totalResponses')}>
-                        {isZh ? '回覆' : 'Resp.'}{sortArrow('totalResponses')}
-                      </th>
-                      <th className="survey-th-sortable" onClick={() => handleSort('badReviews')}>
-                        {isZh ? '差評' : 'Bad'}{sortArrow('badReviews')}
-                      </th>
-                      <th className="survey-th-sortable" onClick={() => handleSort('badRate')}>
-                        {isZh ? '差評率' : 'Rate'}{sortArrow('badRate')}
-                      </th>
-                      <th className="survey-th-sortable" onClick={() => handleSort('avgOverall')}>
-                        {isZh ? '總評' : 'Avg'}{sortArrow('avgOverall')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedStats.map((s) => (
-                      <tr key={s.storeName}
+          {/* ===== 3. Store Table with inline Bad Review Pie ===== */}
+          <section className="section-card">
+            <h2 className="survey-section-title">{isZh ? '門店排行' : 'Store Ranking'}</h2>
+            <p className="survey-section-subtitle">
+              {isZh ? '點擊門店名稱展開差評原因分析' : 'Click a store name to expand bad review analysis'}
+            </p>
+            <div className="survey-table-wrap">
+              <table className="survey-table">
+                <thead>
+                  <tr>
+                    <th className="survey-th-sortable" onClick={() => handleSort('storeName')}
+                      title={isZh ? '門店名稱' : 'Store location name'}>
+                      {isZh ? '門店' : 'Store'}{sortArrow('storeName')}
+                    </th>
+                    <th className="survey-th-sortable" onClick={() => handleSort('totalResponses')}
+                      title={isZh ? '該門店的問卷回覆總數' : 'Total survey responses for this store'}>
+                      {isZh ? '回覆' : 'Resp.'}{sortArrow('totalResponses')}
+                    </th>
+                    <th className="survey-th-sortable" onClick={() => handleSort('badReviews')}
+                      title={isZh ? 'Q1 整體評分 ≤ 3 分的回覆數' : 'Responses where Q1 overall rating ≤ 3'}>
+                      {isZh ? '差評' : 'Bad'}{sortArrow('badReviews')}
+                    </th>
+                    <th className="survey-th-sortable" onClick={() => handleSort('badRate')}
+                      title={isZh ? '差評數 ÷ 總回覆數 × 100%' : 'Bad reviews ÷ Total responses × 100%'}>
+                      {isZh ? '差評率' : 'Rate'}{sortArrow('badRate')}
+                    </th>
+                    <th className="survey-th-sortable" onClick={() => handleSort('avgOverall')}
+                      title={isZh ? 'Q1 整體評分的平均值 (1-5分)' : 'Average of Q1 overall rating (1-5 scale)'}>
+                      {isZh ? '總評' : 'Avg'}{sortArrow('avgOverall')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedStats.map((s) => (
+                    <React.Fragment key={s.storeName}>
+                      <tr
                         className={selectedStore === s.storeName ? 'survey-table-row-active' : ''}
                         onClick={() => setSelectedStore(selectedStore === s.storeName ? null : s.storeName)}>
-                        <td className="survey-table-store">{s.storeName}</td>
+                        <td className="survey-table-store">
+                          <span className={`survey-expand-icon ${selectedStore === s.storeName ? 'survey-expand-icon-open' : ''}`}>&#9654;</span>
+                          {s.storeName}
+                        </td>
                         <td>{s.totalResponses}</td>
                         <td className={s.badReviews > 0 ? 'survey-table-bad' : ''}>{s.badReviews}</td>
                         <td>{(s.badRate * 100).toFixed(1)}%</td>
@@ -623,36 +621,36 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
                           {s.avgOverall > 0 ? s.avgOverall.toFixed(1) : '—'}
                         </td>
                       </tr>
-                    ))}
-                    {sortedStats.length === 0 && (
-                      <tr>
-                        <td colSpan={5} style={{ textAlign: 'center', opacity: 0.5 }}>
-                          {isZh ? '尚無資料' : 'No data yet'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="section-card">
-              <h2 className="survey-section-title">{isZh ? '差評原因分析' : 'Bad Review Analysis'}</h2>
-              <p className="survey-section-subtitle">
-                {selectedStore
-                  ? `${selectedStore} — ${isZh ? '點擊表格切換門店' : 'Click table to switch store'}`
-                  : isZh
-                    ? `${selectedRegion} 全部門店 — 點擊左側表格可查看單店`
-                    : `All ${selectedRegion} stores — Click table for single store`}
-              </p>
-              <BadReviewPie
-                serviceBad={selectedStore ? drillBadData.svc : aggBadReasons.svc}
-                cleanlinessBad={selectedStore ? drillBadData.clean : aggBadReasons.clean}
-                foodBad={selectedStore ? drillBadData.food : aggBadReasons.food}
-                isZh={isZh}
-              />
-            </section>
-          </div>
+                      {selectedStore === s.storeName && (
+                        <tr className="survey-table-expand-row">
+                          <td colSpan={5}>
+                            <div className="survey-table-expand-content">
+                              <h3 className="survey-section-subtitle" style={{ margin: '0 0 8px' }}>
+                                {isZh ? `${s.storeName} 差評原因分析` : `${s.storeName} — Bad Review Analysis`}
+                              </h3>
+                              <BadReviewPie
+                                serviceBad={s.serviceBad}
+                                cleanlinessBad={s.cleanlinessBad}
+                                foodBad={s.foodBad}
+                                isZh={isZh}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                  {sortedStats.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', opacity: 0.5 }}>
+                        {isZh ? '尚無資料' : 'No data yet'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
           {/* ===== 5. Demographics ===== */}
           <CollapsibleSection title={isZh ? '顧客統計' : 'Customer Demographics'}>
