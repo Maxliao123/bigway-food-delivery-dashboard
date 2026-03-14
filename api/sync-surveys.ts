@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { google } from 'googleapis';
-import https from 'https';
 
 /* ------------------------------------------------------------------ */
 /*  Configuration                                                      */
@@ -64,39 +63,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   });
   const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
 
-  // Supabase REST API config (avoid supabase-js ByteString issues with non-ASCII data)
-  const supabaseUrl = process.env.SUPABASE_URL!;
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
+  // Supabase REST API config
+  const supabaseUrl = process.env.SUPABASE_URL!.trim();
+  const supabaseKey = process.env.SUPABASE_SERVICE_KEY!.trim();
 
-  function callRpc(fnName: string, params: Record<string, unknown>): Promise<{ error?: string }> {
-    return new Promise((resolve) => {
-      const body = Buffer.from(JSON.stringify(params), 'utf-8');
-      const url = new URL(`${supabaseUrl}/rest/v1/rpc/${fnName}`);
-      const req = https.request({
-        hostname: url.hostname,
-        path: url.pathname,
+  async function callRpc(fnName: string, params: Record<string, unknown>): Promise<{ error?: string }> {
+    try {
+      const body = new TextEncoder().encode(JSON.stringify(params));
+      const resp = await fetch(`${supabaseUrl}/rest/v1/rpc/${fnName}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          'Content-Length': body.length,
           'apikey': supabaseKey,
           'Authorization': `Bearer ${supabaseKey}`,
         },
-      }, (res) => {
-        let data = '';
-        res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
-        res.on('end', () => {
-          if (res.statusCode && res.statusCode >= 400) {
-            resolve({ error: data });
-          } else {
-            resolve({});
-          }
-        });
+        body: body,
       });
-      req.on('error', (err) => resolve({ error: err.message }));
-      req.write(body);
-      req.end();
-    });
+      if (!resp.ok) {
+        const text = await resp.text();
+        return { error: text };
+      }
+      return {};
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
   }
 
   const results: { region: string; total: number; inserted: number; errors: string[] }[] = [];
