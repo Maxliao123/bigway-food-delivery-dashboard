@@ -99,6 +99,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .filter-label {
@@ -118,6 +119,20 @@ body {
 .filter-date-input {
   min-width: 140px;
   color-scheme: dark;
+}
+
+.filter-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-basis: 100%;
+  margin-top: 4px;
+  padding-left: 54px;
+}
+
+.filter-range-sep {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.9rem;
 }
 
 .filter-hint {

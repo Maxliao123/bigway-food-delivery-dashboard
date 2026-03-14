@@ -32,21 +32,30 @@ function App() {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
 
   // ===== Survey time filter =====
-  type TimeGranularity = 'day' | 'month' | 'year' | 'all';
+  type TimeGranularity = 'day' | 'week' | 'month' | 'year' | 'range' | 'all';
   const [timeGranularity, setTimeGranularity] = useState<TimeGranularity>('all');
   const [timeValue, setTimeValue] = useState<string>(''); // YYYY-MM-DD / YYYY-MM / YYYY
+  const [rangeFrom, setRangeFrom] = useState<string>('');
+  const [rangeTo, setRangeTo] = useState<string>('');
 
   // Compute date range from granularity + value
   const surveyDateFrom = useMemo(() => {
-    if (timeGranularity === 'all' || !timeValue) return undefined;
+    if (timeGranularity === 'range') return rangeFrom ? `${rangeFrom}T00:00:00` : undefined;
+    if (timeGranularity === 'all' || timeGranularity === 'week' || !timeValue) return undefined;
     if (timeGranularity === 'day') return `${timeValue}T00:00:00`;
     if (timeGranularity === 'month') return `${timeValue}-01T00:00:00`;
     if (timeGranularity === 'year') return `${timeValue}-01-01T00:00:00`;
     return undefined;
-  }, [timeGranularity, timeValue]);
+  }, [timeGranularity, timeValue, rangeFrom]);
 
   const surveyDateTo = useMemo(() => {
-    if (timeGranularity === 'all' || !timeValue) return undefined;
+    if (timeGranularity === 'range') {
+      if (!rangeTo) return undefined;
+      const d = new Date(rangeTo);
+      d.setDate(d.getDate() + 1);
+      return `${d.toISOString().slice(0, 10)}T00:00:00`;
+    }
+    if (timeGranularity === 'all' || timeGranularity === 'week' || !timeValue) return undefined;
     if (timeGranularity === 'day') {
       const d = new Date(timeValue);
       d.setDate(d.getDate() + 1);
@@ -59,7 +68,7 @@ function App() {
     }
     if (timeGranularity === 'year') return `${Number(timeValue) + 1}-01-01T00:00:00`;
     return undefined;
-  }, [timeGranularity, timeValue]);
+  }, [timeGranularity, timeValue, rangeTo]);
 
   // 允許看到哪些 Region（依角色）
   const effectiveRole: RoleScope = role ?? 'ALL';
@@ -516,7 +525,9 @@ const prevSelectableMonth = useMemo(() => {
                     ['all', isZh ? '全部' : 'All'],
                     ['year', isZh ? '年' : 'Year'],
                     ['month', isZh ? '月' : 'Month'],
+                    ['week', isZh ? '週' : 'Week'],
                     ['day', isZh ? '日' : 'Day'],
+                    ['range', isZh ? '區間' : 'Range'],
                   ] as const).map(([g, label]) => (
                     <button
                       key={g}
@@ -528,6 +539,7 @@ const prevSelectableMonth = useMemo(() => {
                       onClick={() => {
                         setTimeGranularity(g as TimeGranularity);
                         setTimeValue('');
+                        if (g !== 'range') { setRangeFrom(''); setRangeTo(''); }
                       }}
                     >
                       {label}
@@ -562,6 +574,24 @@ const prevSelectableMonth = useMemo(() => {
                     ))}
                   </select>
                 )}
+                {timeGranularity === 'range' && (
+                  <div className="filter-range-inputs">
+                    <input
+                      type="date"
+                      className="filter-select filter-date-input"
+                      value={rangeFrom}
+                      onChange={(e) => setRangeFrom(e.target.value)}
+                    />
+                    <span className="filter-range-sep">~</span>
+                    <input
+                      type="date"
+                      className="filter-select filter-date-input"
+                      value={rangeTo}
+                      min={rangeFrom}
+                      onChange={(e) => setRangeTo(e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
             <SurveyPanel
@@ -569,6 +599,7 @@ const prevSelectableMonth = useMemo(() => {
               selectedRegion={selectedRegion}
               dateFrom={surveyDateFrom}
               dateTo={surveyDateTo}
+              trendGranularity={timeGranularity}
             />
           </>
         )}

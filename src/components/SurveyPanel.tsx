@@ -5,9 +5,9 @@ import type { Lang, Scope } from '../App';
 import {
   useSurveyData, useOfficialStores,
   computeStoreStats, computeMonthlyTrend, computeAvgScores,
-  computeDemographics, collectTextFeedback,
+  computeDemographics, collectTextFeedback, computeTrend,
 } from '../hooks/useSurveyData';
-import type { StoreStats, MonthlyTrendPoint, TextFeedbackItem } from '../hooks/useSurveyData';
+import type { StoreStats, MonthlyTrendPoint, TextFeedbackItem, TrendGranularity, TrendPoint } from '../hooks/useSurveyData';
 
 /* ------------------------------------------------------------------ */
 /*  CSV → Supabase helpers                                            */
@@ -250,6 +250,120 @@ function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: bo
 }
 
 /* ------------------------------------------------------------------ */
+/*  SVG: Generic Trend Chart (adapts to granularity)                   */
+/* ------------------------------------------------------------------ */
+
+const DAY_LABELS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_LABELS_ZH = ['日', '一', '二', '三', '四', '五', '六'];
+const MONTH_ABBR_G = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function formatTrendLabel(label: string, granularity: TrendGranularity, isZh: boolean): string {
+  switch (granularity) {
+    case 'year':
+      return label; // "2025"
+    case 'week': {
+      // "2025-W42" → "W42"
+      const w = label.split('-W')[1];
+      return `W${w}`;
+    }
+    case 'day': {
+      const idx = Number(label);
+      return isZh ? DAY_LABELS_ZH[idx] : DAY_LABELS_EN[idx];
+    }
+    default: {
+      // month: "2025-10" → "Oct '25"
+      const [yr, mo] = label.split('-');
+      if (!yr || !mo) return label;
+      return `${MONTH_ABBR_G[parseInt(mo, 10) - 1]} '${yr.slice(2)}`;
+    }
+  }
+}
+
+function TrendChart({ data, granularity, isZh }: { data: TrendPoint[]; granularity: TrendGranularity; isZh: boolean }) {
+  if (!data.length) {
+    return <div className="survey-pie-empty">{isZh ? '暫無趨勢數據' : 'No trend data'}</div>;
+  }
+
+  const W = 640, H = 260;
+  const margin = { top: 20, right: 55, bottom: 40, left: 65 };
+  const cw = W - margin.left - margin.right;
+  const ch = H - margin.top - margin.bottom;
+
+  const maxResp = Math.max(...data.map(d => d.responses), 1);
+  const maxRate = Math.max(...data.map(d => d.badRate), 0.01);
+
+  const pad = 30;
+  const plotW = cw - pad * 2;
+  const barW = Math.min(plotW / data.length * 0.6, 40);
+  const getX = (i: number) => margin.left + pad + (data.length === 1 ? plotW / 2 : (plotW / (data.length - 1)) * i);
+  const getYL = (v: number) => margin.top + ch - (v / maxResp) * ch;
+  const getYR = (v: number) => margin.top + ch - (v / maxRate) * ch;
+
+  const gridLines = 4;
+  const grids = Array.from({ length: gridLines + 1 }, (_, i) => {
+    const y = margin.top + (ch / gridLines) * i;
+    const val = maxResp - (maxResp / gridLines) * i;
+    return { y, val };
+  });
+
+  const linePath = data.map((d, i) => {
+    const x = getX(i);
+    const y = getYR(d.badRate);
+    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+
+  return (
+    <div className="survey-trend-container">
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+        {grids.map((g, i) => (
+          <React.Fragment key={i}>
+            <line x1={margin.left} y1={g.y} x2={W - margin.right} y2={g.y}
+              stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+            <text x={margin.left - 8} y={g.y + 4} textAnchor="end"
+              fill="rgba(255,255,255,0.4)" fontSize={10}>
+              {Math.round(g.val)}
+            </text>
+          </React.Fragment>
+        ))}
+        {Array.from({ length: gridLines + 1 }, (_, i) => {
+          const y = margin.top + (ch / gridLines) * i;
+          const val = maxRate - (maxRate / gridLines) * i;
+          return (
+            <text key={`r${i}`} x={W - margin.right + 8} y={y + 4}
+              textAnchor="start" fill="rgba(248,113,113,0.6)" fontSize={10}>
+              {(val * 100).toFixed(0)}%
+            </text>
+          );
+        })}
+        {data.map((d, i) => (
+          <rect key={i} x={getX(i) - barW / 2} y={getYL(d.responses)}
+            width={barW} height={margin.top + ch - getYL(d.responses)}
+            fill="rgba(99,102,241,0.5)" rx={2} />
+        ))}
+        <path d={linePath} fill="none" stroke="#f87171" strokeWidth={2} />
+        {data.map((d, i) => (
+          <circle key={i} cx={getX(i)} cy={getYR(d.badRate)} r={3} fill="#f87171" />
+        ))}
+        {data.map((d, i) => (
+          <text key={i} x={getX(i)} y={H - margin.bottom + 18}
+            textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize={10}>
+            {formatTrendLabel(d.label, granularity, isZh)}
+          </text>
+        ))}
+        <text x={margin.left - 8} y={margin.top - 6}
+          textAnchor="end" fill="rgba(255,255,255,0.4)" fontSize={9}>
+          {isZh ? '回覆數' : 'Responses'}
+        </text>
+        <text x={W - margin.right + 8} y={margin.top - 6}
+          textAnchor="start" fill="rgba(248,113,113,0.6)" fontSize={9}>
+          {isZh ? '差評率' : 'Bad Rate'}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  SVG: Horizontal Bar Chart                                         */
 /* ------------------------------------------------------------------ */
 
@@ -407,9 +521,10 @@ interface Props {
   selectedRegion: Scope;
   dateFrom?: string;
   dateTo?: string;
+  trendGranularity?: TrendGranularity;
 }
 
-export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Props) {
+export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendGranularity = 'all' }: Props) {
   const isZh = language === 'zh';
   const { loading, error, data } = useSurveyData(selectedRegion, dateFrom, dateTo);
   const officialStores = useOfficialStores();
@@ -428,6 +543,7 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
   // Computed data
   const storeStats = useMemo(() => computeStoreStats(displayData, officialStores), [displayData, officialStores]);
   const monthlyTrend = useMemo(() => computeMonthlyTrend(displayData), [displayData]);
+  const trendData = useMemo(() => computeTrend(displayData, trendGranularity), [displayData, trendGranularity]);
   const avgScores = useMemo(() => computeAvgScores(displayData), [displayData]);
   const demographics = useMemo(() => computeDemographics(displayData), [displayData]);
   const textFeedback = useMemo(() => collectTextFeedback(displayData), [displayData]);
@@ -566,16 +682,21 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
             ))}
           </div>
 
-          {/* ===== 2. Monthly Trend ===== */}
-          {monthlyTrend.length > 1 && (
+          {/* ===== 2. Trend Chart (adapts to period) ===== */}
+          {trendData.length > 0 && (
             <section className="section-card">
-              <h2 className="survey-section-title">{isZh ? '月度趨勢' : 'Monthly Trend'}</h2>
+              <h2 className="survey-section-title">
+                {trendGranularity === 'year' ? (isZh ? '年度趨勢' : 'Yearly Trend')
+                  : trendGranularity === 'week' ? (isZh ? '週趨勢' : 'Weekly Trend')
+                  : trendGranularity === 'day' ? (isZh ? '星期趨勢' : 'Day-of-Week Trend')
+                  : (isZh ? '月度趨勢' : 'Monthly Trend')}
+              </h2>
               <p className="survey-section-subtitle">
                 {isZh
-                  ? '追蹤每月回覆量與差評率的變化，快速發現服務品質波動'
-                  : 'Track monthly response volume and bad review rate to spot quality trends'}
+                  ? '追蹤回覆量與差評率的變化，快速發現服務品質波動'
+                  : 'Track response volume and bad review rate to spot quality trends'}
               </p>
-              <MonthlyTrendChart data={monthlyTrend} isZh={isZh} />
+              <TrendChart data={trendData} granularity={trendGranularity} isZh={isZh} />
             </section>
           )}
 
@@ -612,6 +733,23 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
                   </tr>
                 </thead>
                 <tbody>
+                  {/* All stores summary row */}
+                  {sortedStats.length > 0 && (() => {
+                    const allBadRate = totalResponses > 0 ? totalBadReviews / totalResponses : 0;
+                    return (
+                      <tr className="survey-table-row-all" style={{ fontWeight: 600, borderBottom: '2px solid rgba(99,102,241,0.3)' }}>
+                        <td className="survey-table-store" style={{ paddingLeft: 28 }}>
+                          {isZh ? '全部門店' : 'All Stores'}
+                        </td>
+                        <td>{totalResponses}</td>
+                        <td className={totalBadReviews > 0 ? 'survey-table-bad' : ''}>{totalBadReviews}</td>
+                        <td>{(allBadRate * 100).toFixed(1)}%</td>
+                        <td style={{ color: avgScores.overall > 0 ? scoreColor(avgScores.overall) : undefined }}>
+                          {avgScores.overall > 0 ? avgScores.overall.toFixed(1) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })()}
                   {sortedStats.map((s) => (
                     <React.Fragment key={s.storeName}>
                       <tr

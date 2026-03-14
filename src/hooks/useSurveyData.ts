@@ -42,6 +42,15 @@ export interface MonthlyTrendPoint {
   badRate: number;
 }
 
+export type TrendGranularity = 'all' | 'year' | 'month' | 'week' | 'day' | 'range';
+
+export interface TrendPoint {
+  label: string;
+  responses: number;
+  badCount: number;
+  badRate: number;
+}
+
 export interface AvgScores {
   overall: number;
   service: number;
@@ -245,6 +254,64 @@ export function computeMonthlyTrend(data: SurveyRow[]): MonthlyTrendPoint[] {
       badCount: m.bad,
       badRate: m.responses > 0 ? m.bad / m.responses : 0,
     }));
+}
+
+/** Get ISO week string "2026-W12" */
+function getISOWeek(dateStr: string): string {
+  const d = new Date(dateStr);
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  const dayDiff = Math.floor((d.getTime() - jan4.getTime()) / 86400000);
+  const weekNum = Math.ceil((dayDiff + jan4.getDay() + 1) / 7);
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+/** Compute trend data grouped by the selected granularity */
+export function computeTrend(data: SurveyRow[], granularity: TrendGranularity): TrendPoint[] {
+  const map = new Map<string, { responses: number; bad: number }>();
+
+  for (const row of data) {
+    if (!row.submitted_at) continue;
+    let key: string;
+    switch (granularity) {
+      case 'year':
+        key = row.submitted_at.slice(0, 4); // "2026"
+        break;
+      case 'week':
+        key = getISOWeek(row.submitted_at);
+        break;
+      case 'day':
+        key = String(new Date(row.submitted_at).getDay()); // 0=Sun..6=Sat
+        break;
+      default: // 'all', 'month', 'range'
+        key = row.submitted_at.slice(0, 7); // "2026-03"
+        break;
+    }
+    let m = map.get(key);
+    if (!m) { m = { responses: 0, bad: 0 }; map.set(key, m); }
+    m.responses++;
+    if (row.rating_overall != null && row.rating_overall <= 3) m.bad++;
+  }
+
+  let entries = [...map.entries()];
+
+  if (granularity === 'day') {
+    // Sort Sun(0)..Sat(6)
+    entries.sort((a, b) => Number(a[0]) - Number(b[0]));
+  } else {
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+  }
+
+  // Weekly: keep only the last 10 weeks to avoid crowding
+  if (granularity === 'week' && entries.length > 10) {
+    entries = entries.slice(-10);
+  }
+
+  return entries.map(([key, m]) => ({
+    label: key,
+    responses: m.responses,
+    badCount: m.bad,
+    badRate: m.responses > 0 ? m.bad / m.responses : 0,
+  }));
 }
 
 /** Average scores across all rows */
