@@ -65,9 +65,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   });
   const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
 
-  // Supabase REST API config — strip invisible chars that break HTTP headers
-  const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/[^\x20-\x7E]/g, '');
-  const supabaseKey = (process.env.SUPABASE_SERVICE_KEY || '').replace(/[^\x20-\x7E]/g, '');
+  // Supabase REST API config
+  const supabaseUrl = (process.env.SUPABASE_URL || '').trim();
+  const supabaseKey = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 
   async function bulkUpsert(rows: Record<string, unknown>[]): Promise<{ error?: string }> {
     try {
@@ -178,9 +178,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(200).json({
-    version: 4,
+    version: 5,
     timestamp: new Date().toISOString(),
     supabaseUrlLen: supabaseUrl.length,
+    supabaseKeyPrefix: supabaseKey.slice(0, 10),
     supabaseKeyLen: supabaseKey.length,
     results,
   });
