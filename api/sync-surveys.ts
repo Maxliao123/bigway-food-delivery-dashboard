@@ -68,14 +68,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
 
   async function callRpc(fnName: string, params: Record<string, unknown>): Promise<{ error?: string }> {
+    // Use Uint8Array body to avoid Node.js fetch ByteString issues with non-ASCII
+    const bodyBytes = new TextEncoder().encode(JSON.stringify(params));
     const resp = await fetch(`${supabaseUrl}/rest/v1/rpc/${fnName}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
         'apikey': supabaseKey,
         'Authorization': `Bearer ${supabaseKey}`,
       },
-      body: JSON.stringify(params),
+      body: bodyBytes,
     });
     if (!resp.ok) {
       const text = await resp.text();
