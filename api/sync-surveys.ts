@@ -73,7 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   function bulkUpsert(rows: Record<string, unknown>[]): Promise<{ error?: string }> {
     return new Promise((resolve) => {
       const body = Buffer.from(JSON.stringify(rows), 'utf-8');
-      const url = new URL(`${supabaseUrl}/rest/v1/survey_responses`);
+      const url = new URL(`${supabaseUrl}/rest/v1/survey_responses?on_conflict=region,submitted_at,respondent_name,store_name`);
       const options = {
         hostname: url.hostname,
         path: url.pathname,
@@ -189,7 +189,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(200).json({
-    version: 6,
+    version: 7,
     timestamp: new Date().toISOString(),
     supabaseUrlLen: supabaseUrl.length,
     supabaseKeyPrefix: supabaseKey.slice(0, 10),
