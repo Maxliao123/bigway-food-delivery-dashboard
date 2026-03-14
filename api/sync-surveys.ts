@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { google } from 'googleapis';
+import https from 'https';
 
 /* ------------------------------------------------------------------ */
 /*  Configuration                                                      */
@@ -69,27 +70,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const supabaseUrl = (process.env.SUPABASE_URL || '').trim();
   const supabaseKey = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 
-  async function bulkUpsert(rows: Record<string, unknown>[]): Promise<{ error?: string }> {
-    try {
-      const body = new TextEncoder().encode(JSON.stringify(rows));
-      const resp = await fetch(`${supabaseUrl}/rest/v1/survey_responses`, {
+  function bulkUpsert(rows: Record<string, unknown>[]): Promise<{ error?: string }> {
+    return new Promise((resolve) => {
+      const body = Buffer.from(JSON.stringify(rows), 'utf-8');
+      const url = new URL(`${supabaseUrl}/rest/v1/survey_responses`);
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
+          'Content-Length': body.length,
           'apikey': supabaseKey,
           'Authorization': `Bearer ${supabaseKey}`,
           'Prefer': 'resolution=merge-duplicates',
         },
-        body: body,
+      };
+      const req = https.request(options, (resp) => {
+        let data = '';
+        resp.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+        resp.on('end', () => {
+          if (resp.statusCode && resp.statusCode >= 400) {
+            resolve({ error: data });
+          } else {
+            resolve({});
+          }
+        });
       });
-      if (!resp.ok) {
-        const text = await resp.text();
-        return { error: text };
-      }
-      return {};
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) };
-    }
+      req.on('error', (err) => resolve({ error: err.message }));
+      req.write(body);
+      req.end();
+    });
   }
 
   const results: { region: string; total: number; inserted: number; errors: string[] }[] = [];
@@ -178,7 +189,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(200).json({
-    version: 5,
+    version: 6,
     timestamp: new Date().toISOString(),
     supabaseUrlLen: supabaseUrl.length,
     supabaseKeyPrefix: supabaseKey.slice(0, 10),
