@@ -76,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const url = new URL(`${supabaseUrl}/rest/v1/survey_responses?on_conflict=region,submitted_at,respondent_name,store_name`);
       const options = {
         hostname: url.hostname,
-        path: url.pathname,
+        path: url.pathname + url.search,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
@@ -189,7 +189,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(200).json({
-    version: 7,
+    version: 8,
     timestamp: new Date().toISOString(),
     supabaseUrlLen: supabaseUrl.length,
     supabaseKeyPrefix: supabaseKey.slice(0, 10),
