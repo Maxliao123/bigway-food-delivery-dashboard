@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { google } from 'googleapis';
+import https from 'https';
 
 /* ------------------------------------------------------------------ */
 /*  Configuration                                                      */
@@ -67,23 +68,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const supabaseUrl = process.env.SUPABASE_URL!;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
 
-  async function callRpc(fnName: string, params: Record<string, unknown>): Promise<{ error?: string }> {
-    // Use Uint8Array body to avoid Node.js fetch ByteString issues with non-ASCII
-    const bodyBytes = new TextEncoder().encode(JSON.stringify(params));
-    const resp = await fetch(`${supabaseUrl}/rest/v1/rpc/${fnName}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-      },
-      body: bodyBytes,
+  function callRpc(fnName: string, params: Record<string, unknown>): Promise<{ error?: string }> {
+    return new Promise((resolve) => {
+      const body = Buffer.from(JSON.stringify(params), 'utf-8');
+      const url = new URL(`${supabaseUrl}/rest/v1/rpc/${fnName}`);
+      const req = https.request({
+        hostname: url.hostname,
+        path: url.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Length': body.length,
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+        res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 400) {
+            resolve({ error: data });
+          } else {
+            resolve({});
+          }
+        });
+      });
+      req.on('error', (err) => resolve({ error: err.message }));
+      req.write(body);
+      req.end();
     });
-    if (!resp.ok) {
-      const text = await resp.text();
-      return { error: text };
-    }
-    return {};
   }
 
   const results: { region: string; total: number; inserted: number; errors: string[] }[] = [];
