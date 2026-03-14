@@ -97,12 +97,82 @@ export function useOfficialStores() {
   return stores;
 }
 
+/** Canonical store name mapping (survey variants → display name) */
+const STORE_NAME_MAP: Record<string, string> = {
+  'victoria': 'UVic',
+  'victoria bc': 'UVic',
+  'victoria b.c.': 'UVic',
+  'victoria uvic': 'UVic',
+  'victoria by uvic': 'UVic',
+  'victoria, bc': 'UVic',
+  'victoria,bc': 'UVic',
+  'victoria-uvic': 'UVic',
+  'victoria bc- uvic': 'UVic',
+  'victoria (shelbourn)': 'UVic',
+  'victoria/mackenzie ave': 'UVic',
+  'uvic victoria': 'UVic',
+  'uvic, victoria': 'UVic',
+  'uvic': 'UVic',
+  'u vic': 'UVic',
+  'vic': 'UVic',
+  'near uvic': 'UVic',
+  'by uvic': 'UVic',
+  'gilmore, uvic': 'UVic',
+  'olympic village': 'Olympic Village',
+};
+
+/** Store names to hide from the dashboard */
+const STORE_BLACKLIST = new Set([
+  'option 1',
+  'downtown',
+  'bc',
+  'saanich',
+  'tuscany village',
+  'tuscany',
+  'mckenzie',
+  'mackenzie',
+  'mackenzie victoria',
+  'mckenzie ave',
+  'mckenzie , victoria',
+  'mc kenzie',
+  'mackenzie',
+  'mckenzie and shelbourne street',
+  'landsdowne',
+  'vancouver',
+  'gabrielle zhong',
+  'bryan tai',
+  'lonsdale',
+  'north vancouver',
+  'langford',
+  'downtown vancouver',
+  'downtown, vancouver',
+  'north van',
+  'maple ridge',
+  'victory',
+  'west end',
+  'the one on 41st',
+  'the best richmond kimchi!<3',
+  'howe st (vancouver)',
+  'usa california',
+  'allie amores',
+]);
+
 /** Match a survey store name to an official store name (case-insensitive trim) */
 export function normalizeStoreName(name: string, officialStores: string[]): string {
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
+
+  // Check canonical mapping first
+  const mapped = STORE_NAME_MAP[lower];
+  if (mapped) return mapped;
+
   const match = officialStores.find(s => s.toLowerCase() === lower);
   return match ?? trimmed;
+}
+
+/** Check if a store name should be hidden */
+export function isBlacklistedStore(name: string): boolean {
+  return STORE_BLACKLIST.has(name.trim().toLowerCase());
 }
 
 /* ------------------------------------------------------------------ */
@@ -184,9 +254,11 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
     const stores = row.store_name.split(',').map(s => s.trim()).filter(Boolean);
 
     for (let store of stores) {
-      if (officialStores?.length) {
-        store = normalizeStoreName(store, officialStores);
-      }
+      // Apply canonical name mapping
+      store = normalizeStoreName(store, officialStores ?? []);
+
+      // Skip blacklisted stores
+      if (isBlacklistedStore(store)) continue;
 
       let s = map.get(store);
       if (!s) {
