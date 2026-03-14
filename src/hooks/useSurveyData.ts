@@ -403,6 +403,58 @@ export function computeAvgScores(data: SurveyRow[]): AvgScores {
   };
 }
 
+/** Map raw "heard_from" answers to canonical categories */
+function categorizeHeardFrom(raw: string): string {
+  const v = raw.trim().toLowerCase();
+
+  // Word of Mouth
+  if (/friend|sister|brother|daughter|son|family|mom|dad|parent|wife|husband|cousin|uncle|aunt|relative|colleague|coworker|co-worker|roommate|boyfriend|girlfriend|\bgf\b|\bbf\b/i.test(v))
+    return 'Word of Mouth';
+  if (v.includes('word of mouth') || v.includes('口碑'))
+    return 'Word of Mouth';
+
+  // Walk-In / Passing by
+  if (/walk.?in|walking|walk by|passed by|passing|saw it|saw the/i.test(v))
+    return 'Walk-In';
+
+  // Social Media
+  if (/tiktok|tik tok/i.test(v)) return 'TikTok';
+  if (/instagram|\big\b/i.test(v)) return 'Instagram';
+  if (/youtube/i.test(v)) return 'YouTube';
+  if (/facebook|\bfb\b/i.test(v)) return 'Facebook';
+  if (/social media/i.test(v)) return 'Social Media';
+
+  // Review platforms
+  if (/yelp|google|review/i.test(v)) return 'Yelp / Google';
+
+  // Been to other locations
+  if (/been to|other location|locations in canada/i.test(v))
+    return 'Been to other locations';
+
+  // TV / Newspaper
+  if (/newspaper|television|tv\b|chek|news/i.test(v))
+    return 'TV / Newspaper';
+
+  // UVIC / School
+  if (/uvic|university|school|student|campus/i.test(v))
+    return 'School / Campus';
+
+  // Delivery apps
+  if (/uber|doordash|skip|delivery app|foodpanda/i.test(v))
+    return 'Delivery App';
+
+  // Hinge / dating (edge case in data)
+  if (/hinge|dating/i.test(v)) return 'Other';
+
+  // Short junk answers (single char, dash, etc.)
+  if (v.length <= 2 || v === '-' || v === 'n/a' || v === 'na') return 'Other';
+
+  // Anything else → Other
+  return 'Other';
+}
+
+const MAX_DEMOGRAPHIC_ITEMS = 8;
+
 /** Demographics: heard_from + visit_frequency distributions */
 export function computeDemographics(data: SurveyRow[]): DemographicData {
   const heardMap = new Map<string, number>();
@@ -410,8 +462,8 @@ export function computeDemographics(data: SurveyRow[]): DemographicData {
 
   for (const row of data) {
     if (row.heard_from) {
-      const v = row.heard_from.trim();
-      if (v) heardMap.set(v, (heardMap.get(v) ?? 0) + 1);
+      const category = categorizeHeardFrom(row.heard_from);
+      heardMap.set(category, (heardMap.get(category) ?? 0) + 1);
     }
     if (row.visit_frequency) {
       const v = row.visit_frequency.trim();
@@ -419,8 +471,22 @@ export function computeDemographics(data: SurveyRow[]): DemographicData {
     }
   }
 
+  // Limit heard_from to top N, merge rest into "Other"
+  let heardEntries = [...heardMap.entries()].sort((a, b) => b[1] - a[1]);
+  if (heardEntries.length > MAX_DEMOGRAPHIC_ITEMS) {
+    const top = heardEntries.slice(0, MAX_DEMOGRAPHIC_ITEMS - 1);
+    const otherSum = heardEntries.slice(MAX_DEMOGRAPHIC_ITEMS - 1).reduce((sum, e) => sum + e[1], 0);
+    const existingOther = top.find(e => e[0] === 'Other');
+    if (existingOther) {
+      existingOther[1] += otherSum;
+    } else {
+      top.push(['Other', otherSum]);
+    }
+    heardEntries = top.sort((a, b) => b[1] - a[1]);
+  }
+
   return {
-    heardFrom: [...heardMap.entries()].sort((a, b) => b[1] - a[1]),
+    heardFrom: heardEntries,
     visitFrequency: [...freqMap.entries()].sort((a, b) => b[1] - a[1]),
   };
 }
