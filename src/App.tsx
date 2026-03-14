@@ -41,7 +41,16 @@ function App() {
   // Compute date range from granularity + value
   const surveyDateFrom = useMemo(() => {
     if (timeGranularity === 'range') return rangeFrom ? `${rangeFrom}T00:00:00` : undefined;
-    if (timeGranularity === 'all' || timeGranularity === 'week' || !timeValue) return undefined;
+    if (timeGranularity === 'week') {
+      // Last 6 weeks: find Monday 6 weeks ago
+      const now = new Date();
+      const day = now.getDay(); // 0=Sun..6=Sat
+      const diffToMon = (day === 0 ? 6 : day - 1); // days since last Monday
+      const thisMon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMon);
+      const sixWeeksAgo = new Date(thisMon.getTime() - 5 * 7 * 86400000);
+      return `${sixWeeksAgo.toISOString().slice(0, 10)}T00:00:00`;
+    }
+    if (timeGranularity === 'all' || !timeValue) return undefined;
     if (timeGranularity === 'day') return `${timeValue}T00:00:00`;
     if (timeGranularity === 'month') return `${timeValue}-01T00:00:00`;
     if (timeGranularity === 'year') return `${timeValue}-01-01T00:00:00`;
@@ -55,7 +64,15 @@ function App() {
       d.setDate(d.getDate() + 1);
       return `${d.toISOString().slice(0, 10)}T00:00:00`;
     }
-    if (timeGranularity === 'all' || timeGranularity === 'week' || !timeValue) return undefined;
+    if (timeGranularity === 'week') {
+      // End of current week (Sunday end)
+      const now = new Date();
+      const day = now.getDay();
+      const diffToSun = (day === 0 ? 0 : 7 - day);
+      const thisSun = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToSun + 1);
+      return `${thisSun.toISOString().slice(0, 10)}T00:00:00`;
+    }
+    if (timeGranularity === 'all' || !timeValue) return undefined;
     if (timeGranularity === 'day') {
       const d = new Date(timeValue);
       d.setDate(d.getDate() + 1);
