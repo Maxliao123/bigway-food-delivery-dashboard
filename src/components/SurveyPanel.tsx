@@ -147,6 +147,7 @@ async function uploadCsv(file: File, region: Scope): Promise<UploadResult> {
 /* ------------------------------------------------------------------ */
 
 function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: boolean }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   if (!data.length) {
     return <div className="survey-pie-empty">{isZh ? '暫無趨勢數據' : 'No trend data'}</div>;
   }
@@ -160,14 +161,13 @@ function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: bo
   const maxResp = Math.max(...data.map(d => d.responses), 1);
   const maxRate = Math.max(...data.map(d => d.badRate), 0.01);
 
-  const pad = 30; // inner padding so bars don't overlap axis labels
+  const pad = 30;
   const plotW = cw - pad * 2;
   const barW = Math.min(plotW / data.length * 0.6, 40);
   const getX = (i: number) => margin.left + pad + (data.length === 1 ? plotW / 2 : (plotW / (data.length - 1)) * i);
   const getYL = (v: number) => margin.top + ch - (v / maxResp) * ch;
   const getYR = (v: number) => margin.top + ch - (v / maxRate) * ch;
 
-  // Grid lines
   const gridLines = 4;
   const grids = Array.from({ length: gridLines + 1 }, (_, i) => {
     const y = margin.top + (ch / gridLines) * i;
@@ -175,17 +175,18 @@ function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: bo
     return { y, val };
   });
 
-  // Line path for bad rate
   const linePath = data.map((d, i) => {
     const x = getX(i);
     const y = getYR(d.badRate);
     return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
   }).join(' ');
 
+  const hoverSlotW = data.length > 1 ? plotW / (data.length - 1) : plotW;
+
   return (
     <div className="survey-trend-container">
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
-        {/* Grid */}
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet"
+        onMouseLeave={() => setHovered(null)}>
         {grids.map((g, i) => (
           <React.Fragment key={i}>
             <line x1={margin.left} y1={g.y} x2={W - margin.right} y2={g.y}
@@ -197,7 +198,6 @@ function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: bo
           </React.Fragment>
         ))}
 
-        {/* Right axis labels (bad rate) */}
         {Array.from({ length: gridLines + 1 }, (_, i) => {
           const y = margin.top + (ch / gridLines) * i;
           const val = maxRate - (maxRate / gridLines) * i;
@@ -209,21 +209,18 @@ function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: bo
           );
         })}
 
-        {/* Bars */}
         {data.map((d, i) => (
           <rect key={i} x={getX(i) - barW / 2} y={getYL(d.responses)}
             width={barW} height={margin.top + ch - getYL(d.responses)}
-            fill="rgba(99,102,241,0.5)" rx={2} />
+            fill={hovered === i ? 'rgba(99,102,241,0.8)' : 'rgba(99,102,241,0.5)'} rx={2} />
         ))}
 
-        {/* Bad rate line */}
         <path d={linePath} fill="none" stroke="#f87171" strokeWidth={2} />
         {data.map((d, i) => (
-          <circle key={i} cx={getX(i)} cy={getYR(d.badRate)} r={3}
+          <circle key={i} cx={getX(i)} cy={getYR(d.badRate)} r={hovered === i ? 5 : 3}
             fill="#f87171" />
         ))}
 
-        {/* X axis labels */}
         {data.map((d, i) => {
           const [yr, mo] = d.month.split('-');
           const label = `${MONTH_ABBR[parseInt(mo, 10) - 1]} '${yr.slice(2)}`;
@@ -235,7 +232,6 @@ function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: bo
           );
         })}
 
-        {/* Axis titles */}
         <text x={margin.left - 8} y={margin.top - 6}
           textAnchor="end" fill="rgba(255,255,255,0.4)" fontSize={9}>
           {isZh ? '回覆數' : 'Responses'}
@@ -244,6 +240,34 @@ function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: bo
           textAnchor="start" fill="rgba(248,113,113,0.6)" fontSize={9}>
           {isZh ? '差評率' : 'Bad Rate'}
         </text>
+
+        {/* Hover zones */}
+        {data.map((_, i) => (
+          <rect key={`h${i}`} x={getX(i) - hoverSlotW / 2} y={margin.top}
+            width={hoverSlotW} height={ch} fill="transparent"
+            onMouseEnter={() => setHovered(i)} style={{ cursor: 'pointer' }} />
+        ))}
+
+        {/* Tooltip */}
+        {hovered != null && (() => {
+          const d = data[hovered];
+          const tx = getX(hovered);
+          const ty = getYL(d.responses) - 8;
+          return (
+            <g>
+              <line x1={tx} y1={margin.top} x2={tx} y2={margin.top + ch}
+                stroke="rgba(255,255,255,0.15)" strokeWidth={1} strokeDasharray="3,3" />
+              <rect x={tx - 48} y={ty - 30} width={96} height={28} rx={4}
+                fill="rgba(15,23,42,0.92)" stroke="rgba(99,102,241,0.4)" strokeWidth={1} />
+              <text x={tx} y={ty - 18} textAnchor="middle" fill="#e2e8f0" fontSize={10} fontWeight={600}>
+                {d.responses} {isZh ? '筆' : 'resp'}
+              </text>
+              <text x={tx} y={ty - 7} textAnchor="middle" fill="#f87171" fontSize={10}>
+                {(d.badRate * 100).toFixed(1)}% {isZh ? '差評' : 'bad'}
+              </text>
+            </g>
+          );
+        })()}
       </svg>
     </div>
   );
@@ -285,6 +309,7 @@ function formatTrendLabel(label: string, granularity: TrendGranularity, isZh: bo
 }
 
 function TrendChart({ data, granularity, isZh }: { data: TrendPoint[]; granularity: TrendGranularity; isZh: boolean }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   if (!data.length) {
     return <div className="survey-pie-empty">{isZh ? '暫無趨勢數據' : 'No trend data'}</div>;
   }
@@ -317,9 +342,12 @@ function TrendChart({ data, granularity, isZh }: { data: TrendPoint[]; granulari
     return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
   }).join(' ');
 
+  const hoverSlotW = data.length > 1 ? plotW / (data.length - 1) : plotW;
+
   return (
     <div className="survey-trend-container">
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet"
+        onMouseLeave={() => setHovered(null)}>
         {grids.map((g, i) => (
           <React.Fragment key={i}>
             <line x1={margin.left} y1={g.y} x2={W - margin.right} y2={g.y}
@@ -343,11 +371,11 @@ function TrendChart({ data, granularity, isZh }: { data: TrendPoint[]; granulari
         {data.map((d, i) => (
           <rect key={i} x={getX(i) - barW / 2} y={getYL(d.responses)}
             width={barW} height={margin.top + ch - getYL(d.responses)}
-            fill="rgba(99,102,241,0.5)" rx={2} />
+            fill={hovered === i ? 'rgba(99,102,241,0.8)' : 'rgba(99,102,241,0.5)'} rx={2} />
         ))}
         <path d={linePath} fill="none" stroke="#f87171" strokeWidth={2} />
         {data.map((d, i) => (
-          <circle key={i} cx={getX(i)} cy={getYR(d.badRate)} r={3} fill="#f87171" />
+          <circle key={i} cx={getX(i)} cy={getYR(d.badRate)} r={hovered === i ? 5 : 3} fill="#f87171" />
         ))}
         {data.map((d, i) => (
           <text key={i} x={getX(i)} y={H - margin.bottom + 18}
@@ -363,6 +391,34 @@ function TrendChart({ data, granularity, isZh }: { data: TrendPoint[]; granulari
           textAnchor="start" fill="rgba(248,113,113,0.6)" fontSize={9}>
           {isZh ? '差評率' : 'Bad Rate'}
         </text>
+
+        {/* Hover zones */}
+        {data.map((_, i) => (
+          <rect key={`h${i}`} x={getX(i) - hoverSlotW / 2} y={margin.top}
+            width={hoverSlotW} height={ch} fill="transparent"
+            onMouseEnter={() => setHovered(i)} style={{ cursor: 'pointer' }} />
+        ))}
+
+        {/* Tooltip */}
+        {hovered != null && (() => {
+          const d = data[hovered];
+          const tx = getX(hovered);
+          const ty = getYL(d.responses) - 8;
+          return (
+            <g>
+              <line x1={tx} y1={margin.top} x2={tx} y2={margin.top + ch}
+                stroke="rgba(255,255,255,0.15)" strokeWidth={1} strokeDasharray="3,3" />
+              <rect x={tx - 48} y={ty - 30} width={96} height={28} rx={4}
+                fill="rgba(15,23,42,0.92)" stroke="rgba(99,102,241,0.4)" strokeWidth={1} />
+              <text x={tx} y={ty - 18} textAnchor="middle" fill="#e2e8f0" fontSize={10} fontWeight={600}>
+                {d.responses} {isZh ? '筆' : 'resp'}
+              </text>
+              <text x={tx} y={ty - 7} textAnchor="middle" fill="#f87171" fontSize={10}>
+                {(d.badRate * 100).toFixed(1)}% {isZh ? '差評' : 'bad'}
+              </text>
+            </g>
+          );
+        })()}
       </svg>
     </div>
   );
