@@ -2,24 +2,25 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import Papa from 'papaparse';
 import { supabase } from '../lib/supabaseClient';
 import type { Lang, Scope } from '../App';
-import { useSurveyData, computeStoreStats } from '../hooks/useSurveyData';
-import type { StoreStats } from '../hooks/useSurveyData';
+import {
+  useSurveyData, useOfficialStores,
+  computeStoreStats, computeMonthlyTrend, computeAvgScores,
+  computeDemographics, collectTextFeedback,
+} from '../hooks/useSurveyData';
+import type { StoreStats, MonthlyTrendPoint, TextFeedbackItem } from '../hooks/useSurveyData';
 
 /* ------------------------------------------------------------------ */
 /*  CSV → Supabase helpers                                            */
 /* ------------------------------------------------------------------ */
 
-/** Normalise column header: strip leading number/dot, trim whitespace */
 function normaliseHeader(h: string): string {
   return h.replace(/^\d+\.\s*/, '').trim().toLowerCase();
 }
 
-/** Find column index whose normalised header includes `needle` */
 function findCol(headers: string[], needle: string): number {
   return headers.findIndex((h) => normaliseHeader(h).includes(needle));
 }
 
-/** Parse US-style timestamp  "M/D/YYYY H:M:S"  →  ISO string */
 function parseTimestamp(raw: string): string | null {
   if (!raw) return null;
   const [datePart, timePart] = raw.split(' ');
@@ -44,10 +45,7 @@ interface UploadResult {
   errors: string[];
 }
 
-async function uploadCsv(
-  file: File,
-  region: Scope,
-): Promise<UploadResult> {
+async function uploadCsv(file: File, region: Scope): Promise<UploadResult> {
   return new Promise((resolve) => {
     Papa.parse(file, {
       header: false,
@@ -60,7 +58,7 @@ async function uploadCsv(
         }
 
         const headers = rows[0];
-        const colTs = 0; // Timestamp is always col 0
+        const colTs = 0;
         const colLoc = findCol(headers, 'location');
         const colOverall = findCol(headers, 'overall experience');
         const colService = findCol(headers, 'service');
@@ -72,12 +70,8 @@ async function uploadCsv(
         const colRace = findCol(headers, 'race');
         const colFreq = findCol(headers, 'how often');
         const colMember = findCol(headers, 'existing member');
-        const colName = headers.findIndex(
-          (h) => h.trim().toLowerCase() === 'name',
-        );
-        const colEmail = headers.findIndex((h) =>
-          h.trim().toLowerCase().includes('email'),
-        );
+        const colName = headers.findIndex((h) => h.trim().toLowerCase() === 'name');
+        const colEmail = headers.findIndex((h) => h.trim().toLowerCase().includes('email'));
 
         const records: Record<string, unknown>[] = [];
         const errs: string[] = [];
@@ -90,7 +84,6 @@ async function uploadCsv(
             errs.push(`Row ${i + 1}: missing timestamp or store`);
             continue;
           }
-
           records.push({
             region,
             submitted_at: ts,
@@ -110,7 +103,6 @@ async function uploadCsv(
           });
         }
 
-        // Upsert via RPC one-by-one (to bypass schema cache issue)
         let inserted = 0;
         const BATCH = 50;
         for (let i = 0; i < records.length; i += BATCH) {
@@ -144,49 +136,167 @@ async function uploadCsv(
           }
         }
 
-        resolve({
-          region,
-          total: records.length,
-          inserted,
-          skipped: rows.length - 1 - records.length,
-          errors: errs,
-        });
+        resolve({ region, total: records.length, inserted, skipped: rows.length - 1 - records.length, errors: errs });
       },
     });
   });
 }
 
 /* ------------------------------------------------------------------ */
-/*  Pie Chart SVG                                                     */
+/*  SVG: Monthly Trend Chart                                          */
 /* ------------------------------------------------------------------ */
 
-interface PieSlice {
-  label: string;
-  value: number;
-  color: string;
-}
-
-function PieChart({
-  slices,
-  size = 180,
-  isZh,
-}: {
-  slices: PieSlice[];
-  size?: number;
-  isZh: boolean;
-}) {
-  const total = slices.reduce((s, sl) => s + sl.value, 0);
-  if (total === 0) {
-    return (
-      <div className="survey-pie-empty">
-        {isZh ? '沒有差評資料' : 'No negative reviews'}
-      </div>
-    );
+function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: boolean }) {
+  if (!data.length) {
+    return <div className="survey-pie-empty">{isZh ? '暫無趨勢數據' : 'No trend data'}</div>;
   }
 
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = size / 2 - 10;
+  const W = 600, H = 260;
+  const margin = { top: 20, right: 55, bottom: 40, left: 50 };
+  const cw = W - margin.left - margin.right;
+  const ch = H - margin.top - margin.bottom;
+
+  const maxResp = Math.max(...data.map(d => d.responses), 1);
+  const maxRate = Math.max(...data.map(d => d.badRate), 0.01);
+
+  const barW = Math.min(cw / data.length * 0.6, 40);
+  const getX = (i: number) => margin.left + (data.length === 1 ? cw / 2 : (cw / (data.length - 1)) * i);
+  const getYL = (v: number) => margin.top + ch - (v / maxResp) * ch;
+  const getYR = (v: number) => margin.top + ch - (v / maxRate) * ch;
+
+  // Grid lines
+  const gridLines = 4;
+  const grids = Array.from({ length: gridLines + 1 }, (_, i) => {
+    const y = margin.top + (ch / gridLines) * i;
+    const val = maxResp - (maxResp / gridLines) * i;
+    return { y, val };
+  });
+
+  // Line path for bad rate
+  const linePath = data.map((d, i) => {
+    const x = getX(i);
+    const y = getYR(d.badRate);
+    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+
+  return (
+    <div className="survey-trend-container">
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+        {/* Grid */}
+        {grids.map((g, i) => (
+          <React.Fragment key={i}>
+            <line x1={margin.left} y1={g.y} x2={W - margin.right} y2={g.y}
+              stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+            <text x={margin.left - 8} y={g.y + 4} textAnchor="end"
+              fill="rgba(255,255,255,0.4)" fontSize={10}>
+              {Math.round(g.val)}
+            </text>
+          </React.Fragment>
+        ))}
+
+        {/* Right axis labels (bad rate) */}
+        {Array.from({ length: gridLines + 1 }, (_, i) => {
+          const y = margin.top + (ch / gridLines) * i;
+          const val = maxRate - (maxRate / gridLines) * i;
+          return (
+            <text key={`r${i}`} x={W - margin.right + 8} y={y + 4}
+              textAnchor="start" fill="rgba(248,113,113,0.6)" fontSize={10}>
+              {(val * 100).toFixed(0)}%
+            </text>
+          );
+        })}
+
+        {/* Bars */}
+        {data.map((d, i) => (
+          <rect key={i} x={getX(i) - barW / 2} y={getYL(d.responses)}
+            width={barW} height={margin.top + ch - getYL(d.responses)}
+            fill="rgba(99,102,241,0.5)" rx={2} />
+        ))}
+
+        {/* Bad rate line */}
+        <path d={linePath} fill="none" stroke="#f87171" strokeWidth={2} />
+        {data.map((d, i) => (
+          <circle key={i} cx={getX(i)} cy={getYR(d.badRate)} r={3}
+            fill="#f87171" />
+        ))}
+
+        {/* X axis labels */}
+        {data.map((d, i) => (
+          <text key={i} x={getX(i)} y={H - margin.bottom + 18}
+            textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize={10}>
+            {d.month.slice(5)}
+          </text>
+        ))}
+
+        {/* Axis titles */}
+        <text x={margin.left - 8} y={margin.top - 6}
+          textAnchor="end" fill="rgba(255,255,255,0.4)" fontSize={9}>
+          {isZh ? '回覆數' : 'Responses'}
+        </text>
+        <text x={W - margin.right + 8} y={margin.top - 6}
+          textAnchor="start" fill="rgba(248,113,113,0.6)" fontSize={9}>
+          {isZh ? '差評率' : 'Bad Rate'}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  SVG: Horizontal Bar Chart                                         */
+/* ------------------------------------------------------------------ */
+
+function HBarChart({ items, maxValue, color, isZh: _isZh }: {
+  items: { label: string; value: number }[];
+  maxValue?: number;
+  color?: string;
+  isZh: boolean;
+}) {
+  const max = maxValue ?? Math.max(...items.map(i => i.value), 1);
+  return (
+    <div className="survey-hbar-list">
+      {items.map((item, i) => (
+        <div key={i} className="survey-hbar-row">
+          <span className="survey-hbar-label">{item.label}</span>
+          <div className="survey-hbar-track">
+            <div className="survey-hbar-fill"
+              style={{
+                width: `${max > 0 ? (item.value / max) * 100 : 0}%`,
+                background: color ?? '#6366f1',
+              }} />
+          </div>
+          <span className="survey-hbar-value">{item.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Pie Chart: Bad Review Reasons                                      */
+/* ------------------------------------------------------------------ */
+
+interface PieSlice { label: string; value: number; color: string; }
+
+function BadReviewPie({ serviceBad, cleanlinessBad, foodBad, isZh }: {
+  serviceBad: number;
+  cleanlinessBad: number;
+  foodBad: number;
+  isZh: boolean;
+}) {
+  const slices: PieSlice[] = [
+    { label: isZh ? '服務 Service' : 'Service', value: serviceBad, color: '#f97316' },
+    { label: isZh ? '衛生 Cleanliness' : 'Cleanliness', value: cleanlinessBad, color: '#06b6d4' },
+    { label: isZh ? '食物 Food' : 'Food Quality', value: foodBad, color: '#a855f7' },
+  ];
+
+  const total = slices.reduce((s, sl) => s + sl.value, 0);
+  if (total === 0) {
+    return <div className="survey-pie-empty">{isZh ? '沒有差評資料' : 'No negative reviews'}</div>;
+  }
+
+  const size = 180;
+  const cx = size / 2, cy = size / 2, r = size / 2 - 10;
   let cumAngle = -Math.PI / 2;
 
   const paths: React.ReactNode[] = [];
@@ -203,62 +313,83 @@ function PieChart({
     const largeArc = angle > Math.PI ? 1 : 0;
 
     paths.push(
-      <path
-        key={idx}
+      <path key={idx}
         d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`}
-        fill={sl.color}
-        stroke="rgba(2,6,23,0.8)"
-        strokeWidth={2}
-      />,
+        fill={sl.color} stroke="rgba(2,6,23,0.8)" strokeWidth={2} />
     );
 
-    // Label position at middle of arc
-    const midAngle = cumAngle + angle / 2;
-    const lr = r * 0.65;
-    const lx = cx + lr * Math.cos(midAngle);
-    const ly = cy + lr * Math.sin(midAngle);
     if (pct > 0.05) {
+      const midAngle = cumAngle + angle / 2;
+      const lr = r * 0.65;
       labels.push(
-        <text
-          key={`l${idx}`}
-          x={lx}
-          y={ly}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill="#fff"
-          fontSize={12}
-          fontWeight={600}
-        >
+        <text key={`l${idx}`} x={cx + lr * Math.cos(midAngle)} y={cy + lr * Math.sin(midAngle)}
+          textAnchor="middle" dominantBaseline="central"
+          fill="#fff" fontSize={12} fontWeight={600}>
           {(pct * 100).toFixed(0)}%
-        </text>,
+        </text>
       );
     }
-
     cumAngle += angle;
   });
 
   return (
     <div className="survey-pie-container">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {paths}
-        {labels}
+        {paths}{labels}
       </svg>
       <div className="survey-pie-legend">
         {slices.map((sl, i) => (
           <div key={i} className="survey-pie-legend-item">
-            <span
-              className="survey-pie-legend-dot"
-              style={{ background: sl.color }}
-            />
-            <span className="survey-pie-legend-label">
-              {sl.label}: {sl.value}
-            </span>
+            <span className="survey-pie-legend-dot" style={{ background: sl.color }} />
+            <span className="survey-pie-legend-label">{sl.label}: {sl.value}</span>
           </div>
         ))}
       </div>
+      <p className="survey-bar-footnote" style={{ marginTop: 12 }}>
+        {isZh
+          ? `* 差評總數 ${total}（含重疊：一筆差評可同時計入多個分類）`
+          : `* Total complaints: ${total} (may overlap — one review can count in multiple categories)`}
+      </p>
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/*  Collapsible Section wrapper                                       */
+/* ------------------------------------------------------------------ */
+
+function CollapsibleSection({ title, defaultOpen = true, children }: {
+  title: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="section-card">
+      <div className="survey-collapsible-header" onClick={() => setOpen(!open)}>
+        <h2 className="survey-section-title" style={{ margin: 0 }}>{title}</h2>
+        <span className={`survey-chevron ${open ? 'survey-chevron-open' : ''}`}>&#9654;</span>
+      </div>
+      {open && <div className="survey-collapsible-body">{children}</div>}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Score color helper                                                 */
+/* ------------------------------------------------------------------ */
+
+function scoreColor(v: number): string {
+  if (v >= 4.0) return '#4ade80';
+  if (v >= 3.0) return '#facc15';
+  return '#f87171';
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sort key type                                                      */
+/* ------------------------------------------------------------------ */
+
+type SortKey = 'storeName' | 'totalResponses' | 'badReviews' | 'badRate' | 'avgOverall' | 'avgService' | 'avgCleanliness' | 'avgFood';
 
 /* ------------------------------------------------------------------ */
 /*  Main SurveyPanel                                                  */
@@ -274,6 +405,7 @@ interface Props {
 export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Props) {
   const isZh = language === 'zh';
   const { loading, error, data } = useSurveyData(selectedRegion, dateFrom, dateTo);
+  const officialStores = useOfficialStores();
   const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
   const [uploading, setUploading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -283,41 +415,70 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
     ON: useRef<HTMLInputElement>(null),
   };
 
-  // Force re-fetch after upload
   const { data: liveData } = useSurveyData(selectedRegion, dateFrom, dateTo);
   const displayData = refreshKey > 0 ? liveData : data;
 
-  const storeStats = useMemo(
-    () => computeStoreStats(displayData),
-    [displayData],
-  );
+  // Computed data
+  const storeStats = useMemo(() => computeStoreStats(displayData, officialStores), [displayData, officialStores]);
+  const monthlyTrend = useMemo(() => computeMonthlyTrend(displayData), [displayData]);
+  const avgScores = useMemo(() => computeAvgScores(displayData), [displayData]);
+  const demographics = useMemo(() => computeDemographics(displayData), [displayData]);
+  const textFeedback = useMemo(() => collectTextFeedback(displayData), [displayData]);
 
-  // Aggregate pie data across all stores for current region
-  const pieSlices = useMemo((): PieSlice[] => {
-    let svc = 0, clean = 0, food = 0;
-    for (const s of storeStats) {
-      svc += s.serviceBad;
-      clean += s.cleanlinessBad;
-      food += s.foodBad;
+  const totalBadReviews = storeStats.reduce((s, st) => s + st.badReviews, 0);
+  const totalResponses = storeStats.reduce((s, st) => s + st.totalResponses, 0);
+
+  // Sort state for store table
+  const [sortKey, setSortKey] = useState<SortKey>('badReviews');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const sortedStats = useMemo(() => {
+    const copy = [...storeStats];
+    copy.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (typeof av === 'string' && typeof bv === 'string') {
+        return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      return sortDir === 'asc' ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    });
+    return copy;
+  }, [storeStats, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
     }
-    return [
-      {
-        label: isZh ? '服務 (Service)' : 'Service',
-        value: svc,
-        color: '#f97316',
-      },
-      {
-        label: isZh ? '衛生 (Cleanliness)' : 'Cleanliness',
-        value: clean,
-        color: '#06b6d4',
-      },
-      {
-        label: isZh ? '食物品質 (Food)' : 'Food Quality',
-        value: food,
-        color: '#a855f7',
-      },
-    ];
-  }, [storeStats, isZh]);
+  };
+
+  const sortArrow = (key: SortKey) => sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+
+  // Per-store drill-down
+  const [selectedStore, setSelectedStore] = useState<string | null>(null);
+
+  const drillBadData = useMemo(() => {
+    if (!selectedStore) {
+      return { svc: 0, clean: 0, food: 0, total: totalBadReviews };
+    }
+    const s = storeStats.find(st => st.storeName === selectedStore);
+    if (!s) return { svc: 0, clean: 0, food: 0, total: 0 };
+    return { svc: s.serviceBad, clean: s.cleanlinessBad, food: s.foodBad, total: s.badReviews };
+  }, [selectedStore, storeStats, totalBadReviews]);
+
+  // Aggregate bad review reasons across all stores
+  const aggBadReasons = useMemo(() => {
+    let svc = 0, clean = 0, food = 0;
+    for (const s of storeStats) { svc += s.serviceBad; clean += s.cleanlinessBad; food += s.foodBad; }
+    return { svc, clean, food };
+  }, [storeStats]);
+
+  // Text feedback display limit
+  const [showAllBad, setShowAllBad] = useState(false);
+  const [showAllPositive, setShowAllPositive] = useState(false);
+  const FEEDBACK_LIMIT = 50;
 
   const handleUpload = useCallback(
     async (region: Scope) => {
@@ -326,10 +487,7 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
       setUploading(true);
       try {
         const result = await uploadCsv(input.files[0], region);
-        setUploadResults((prev) => [
-          result,
-          ...prev.filter((r) => r.region !== region),
-        ]);
+        setUploadResults((prev) => [result, ...prev.filter((r) => r.region !== region)]);
         setRefreshKey((k) => k + 1);
       } finally {
         setUploading(false);
@@ -340,104 +498,35 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
     [],
   );
 
-  // Per-store pie data
-  const [selectedStore, setSelectedStore] = useState<string | null>(null);
-
-  const storePieSlices = useMemo((): PieSlice[] => {
-    if (!selectedStore) return pieSlices;
-    const s = storeStats.find((st) => st.storeName === selectedStore);
-    if (!s) return pieSlices;
-    return [
-      {
-        label: isZh ? '服務 (Service)' : 'Service',
-        value: s.serviceBad,
-        color: '#f97316',
-      },
-      {
-        label: isZh ? '衛生 (Cleanliness)' : 'Cleanliness',
-        value: s.cleanlinessBad,
-        color: '#06b6d4',
-      },
-      {
-        label: isZh ? '食物品質 (Food)' : 'Food Quality',
-        value: s.foodBad,
-        color: '#a855f7',
-      },
-    ];
-  }, [selectedStore, storeStats, pieSlices, isZh]);
-
-  const totalBadReviews = storeStats.reduce((s, st) => s + st.badReviews, 0);
-  const totalResponses = storeStats.reduce((s, st) => s + st.totalResponses, 0);
-
-  return (
-    <div className="survey-panel">
-      {/* ===== Upload Section ===== */}
-      <section className="section-card survey-upload-section">
-        <h2 className="survey-section-title">
-          {isZh ? '上傳問卷 CSV' : 'Upload Survey CSV'}
-        </h2>
-        <p className="survey-section-subtitle">
-          {isZh
-            ? '從 Google Sheets 下載 CSV 後上傳對應地區的檔案'
-            : 'Download CSV from Google Sheets and upload for each region'}
-        </p>
-        <div className="survey-upload-grid">
-          {(['BC', 'CA', 'ON'] as Scope[]).map((r) => (
-            <div key={r} className="survey-upload-card">
-              <span className="survey-upload-region">{r}</span>
-              <input
-                ref={fileRefs[r]}
-                type="file"
-                accept=".csv"
-                style={{ display: 'none' }}
-                onChange={() => handleUpload(r)}
-              />
-              <button
-                className="survey-upload-btn"
-                onClick={() => fileRefs[r].current?.click()}
-                disabled={uploading}
-              >
-                {uploading
-                  ? isZh
-                    ? '上傳中…'
-                    : 'Uploading…'
-                  : isZh
-                    ? '選擇檔案'
-                    : 'Choose File'}
-              </button>
-              {uploadResults.find((u) => u.region === r) && (
-                <div className="survey-upload-result">
-                  {(() => {
-                    const ur = uploadResults.find((u) => u.region === r)!;
-                    return (
-                      <>
-                        <span className="survey-upload-success">
-                          {isZh
-                            ? `已處理 ${ur.inserted} 筆`
-                            : `${ur.inserted} processed`}
-                        </span>
-                        {ur.skipped > 0 && (
-                          <span className="survey-upload-skip">
-                            {isZh
-                              ? `${ur.skipped} 筆跳過`
-                              : `${ur.skipped} skipped`}
-                          </span>
-                        )}
-                        {ur.errors.length > 0 && (
-                          <span className="survey-upload-error">
-                            {ur.errors[0]}
-                          </span>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
+  const FeedbackList = ({ items, showAll, setShowAll }: {
+    items: TextFeedbackItem[];
+    showAll: boolean;
+    setShowAll: (v: boolean) => void;
+  }) => {
+    const displayed = showAll ? items : items.slice(0, FEEDBACK_LIMIT);
+    if (!items.length) return <p style={{ opacity: 0.5 }}>{isZh ? '暫無資料' : 'No data'}</p>;
+    return (
+      <>
+        <div className="survey-feedback-list">
+          {displayed.map((item, i) => (
+            <div key={i} className="survey-feedback-item">
+              <span className="survey-feedback-store-tag">{item.store}</span>
+              <span className="survey-feedback-date">{item.date}</span>
+              <p className="survey-feedback-text">{item.text}</p>
             </div>
           ))}
         </div>
-      </section>
+        {items.length > FEEDBACK_LIMIT && !showAll && (
+          <button className="survey-show-more" onClick={() => setShowAll(true)}>
+            {isZh ? `顯示全部 (${items.length})` : `Show all (${items.length})`}
+          </button>
+        )}
+      </>
+    );
+  };
 
+  return (
+    <div className="survey-panel">
       {/* ===== Loading / Error ===== */}
       {loading && (
         <div className="status status-loading">
@@ -446,91 +535,98 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
       )}
       {error && (
         <div className="status status-error">
-          {isZh ? '錯誤：' : 'Error: '}
-          {error}
+          {isZh ? '錯誤：' : 'Error: '}{error}
         </div>
       )}
 
-      {/* ===== Stats ===== */}
       {!loading && !error && (
         <>
-          {/* KPI summary */}
+          {/* ===== 1. KPI Summary ===== */}
           <section className="section-card">
             <div className="survey-kpi-row">
               <div className="survey-kpi-card">
                 <div className="survey-kpi-value">{totalResponses}</div>
-                <div className="survey-kpi-label">
-                  {isZh ? '總回覆數' : 'Total Responses'}
-                </div>
+                <div className="survey-kpi-label">{isZh ? '總回覆數' : 'Total Responses'}</div>
               </div>
               <div className="survey-kpi-card survey-kpi-bad">
                 <div className="survey-kpi-value">{totalBadReviews}</div>
-                <div className="survey-kpi-label">
-                  {isZh ? '差評數 (≤3分)' : 'Bad Reviews (≤3)'}
-                </div>
+                <div className="survey-kpi-label">{isZh ? '差評數 (≤3分)' : 'Bad Reviews (≤3)'}</div>
               </div>
               <div className="survey-kpi-card">
                 <div className="survey-kpi-value">
-                  {totalResponses > 0
-                    ? ((totalBadReviews / totalResponses) * 100).toFixed(1) + '%'
-                    : '—'}
+                  {totalResponses > 0 ? ((totalBadReviews / totalResponses) * 100).toFixed(1) + '%' : '—'}
                 </div>
-                <div className="survey-kpi-label">
-                  {isZh ? '差評率' : 'Bad Review Rate'}
-                </div>
+                <div className="survey-kpi-label">{isZh ? '差評率' : 'Bad Review Rate'}</div>
               </div>
+            </div>
+            <div className="survey-kpi-row survey-kpi-row-scores">
+              {([
+                { label: isZh ? '整體平均' : 'Overall Avg', value: avgScores.overall },
+                { label: isZh ? '服務平均' : 'Service Avg', value: avgScores.service },
+                { label: isZh ? '衛生平均' : 'Cleanliness Avg', value: avgScores.cleanliness },
+                { label: isZh ? '食物平均' : 'Food Avg', value: avgScores.food },
+              ] as const).map((item, i) => (
+                <div key={i} className="survey-kpi-card">
+                  <div className="survey-kpi-value" style={{ color: item.value > 0 ? scoreColor(item.value) : undefined }}>
+                    {item.value > 0 ? item.value.toFixed(1) : '—'}
+                    {item.value > 0 && <span className="survey-kpi-of5"> / 5</span>}
+                  </div>
+                  <div className="survey-kpi-label">{item.label}</div>
+                </div>
+              ))}
             </div>
           </section>
 
-          {/* Two-column layout: table + pie */}
-          <div className="survey-analysis-grid">
-            {/* Bad review table */}
+          {/* ===== 2. Monthly Trend ===== */}
+          {monthlyTrend.length > 1 && (
             <section className="section-card">
-              <h2 className="survey-section-title">
-                {isZh ? '門店差評統計' : 'Store Bad Review Stats'}
-              </h2>
+              <h2 className="survey-section-title">{isZh ? '月度趨勢' : 'Monthly Trend'}</h2>
+              <MonthlyTrendChart data={monthlyTrend} isZh={isZh} />
+            </section>
+          )}
+
+          {/* ===== 3. Store Table + 4. Bad Review Analysis ===== */}
+          <div className="survey-analysis-grid">
+            <section className="section-card">
+              <h2 className="survey-section-title">{isZh ? '門店排行' : 'Store Ranking'}</h2>
               <div className="survey-table-wrap">
                 <table className="survey-table">
                   <thead>
                     <tr>
-                      <th>{isZh ? '門店' : 'Store'}</th>
-                      <th>{isZh ? '回覆數' : 'Responses'}</th>
-                      <th>{isZh ? '差評數' : 'Bad Reviews'}</th>
-                      <th>{isZh ? '差評率' : 'Rate'}</th>
+                      <th className="survey-th-sortable" onClick={() => handleSort('storeName')}>
+                        {isZh ? '門店' : 'Store'}{sortArrow('storeName')}
+                      </th>
+                      <th className="survey-th-sortable" onClick={() => handleSort('totalResponses')}>
+                        {isZh ? '回覆' : 'Resp.'}{sortArrow('totalResponses')}
+                      </th>
+                      <th className="survey-th-sortable" onClick={() => handleSort('badReviews')}>
+                        {isZh ? '差評' : 'Bad'}{sortArrow('badReviews')}
+                      </th>
+                      <th className="survey-th-sortable" onClick={() => handleSort('badRate')}>
+                        {isZh ? '差評率' : 'Rate'}{sortArrow('badRate')}
+                      </th>
+                      <th className="survey-th-sortable" onClick={() => handleSort('avgOverall')}>
+                        {isZh ? '總評' : 'Avg'}{sortArrow('avgOverall')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {storeStats.map((s) => (
-                      <tr
-                        key={s.storeName}
-                        className={
-                          selectedStore === s.storeName
-                            ? 'survey-table-row-active'
-                            : ''
-                        }
-                        onClick={() =>
-                          setSelectedStore(
-                            selectedStore === s.storeName
-                              ? null
-                              : s.storeName,
-                          )
-                        }
-                      >
+                    {sortedStats.map((s) => (
+                      <tr key={s.storeName}
+                        className={selectedStore === s.storeName ? 'survey-table-row-active' : ''}
+                        onClick={() => setSelectedStore(selectedStore === s.storeName ? null : s.storeName)}>
                         <td className="survey-table-store">{s.storeName}</td>
                         <td>{s.totalResponses}</td>
-                        <td
-                          className={
-                            s.badReviews > 0 ? 'survey-table-bad' : ''
-                          }
-                        >
-                          {s.badReviews}
-                        </td>
+                        <td className={s.badReviews > 0 ? 'survey-table-bad' : ''}>{s.badReviews}</td>
                         <td>{(s.badRate * 100).toFixed(1)}%</td>
+                        <td style={{ color: s.avgOverall > 0 ? scoreColor(s.avgOverall) : undefined }}>
+                          {s.avgOverall > 0 ? s.avgOverall.toFixed(1) : '—'}
+                        </td>
                       </tr>
                     ))}
-                    {storeStats.length === 0 && (
+                    {sortedStats.length === 0 && (
                       <tr>
-                        <td colSpan={4} style={{ textAlign: 'center', opacity: 0.5 }}>
+                        <td colSpan={5} style={{ textAlign: 'center', opacity: 0.5 }}>
                           {isZh ? '尚無資料' : 'No data yet'}
                         </td>
                       </tr>
@@ -540,11 +636,8 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
               </div>
             </section>
 
-            {/* Pie chart */}
             <section className="section-card">
-              <h2 className="survey-section-title">
-                {isZh ? '差評原因分佈' : 'Bad Review Reasons'}
-              </h2>
+              <h2 className="survey-section-title">{isZh ? '差評原因分析' : 'Bad Review Analysis'}</h2>
               <p className="survey-section-subtitle">
                 {selectedStore
                   ? `${selectedStore} — ${isZh ? '點擊表格切換門店' : 'Click table to switch store'}`
@@ -552,11 +645,103 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Prop
                     ? `${selectedRegion} 全部門店 — 點擊左側表格可查看單店`
                     : `All ${selectedRegion} stores — Click table for single store`}
               </p>
-              <PieChart slices={storePieSlices} isZh={isZh} />
+              <BadReviewPie
+                serviceBad={selectedStore ? drillBadData.svc : aggBadReasons.svc}
+                cleanlinessBad={selectedStore ? drillBadData.clean : aggBadReasons.clean}
+                foodBad={selectedStore ? drillBadData.food : aggBadReasons.food}
+                isZh={isZh}
+              />
             </section>
           </div>
+
+          {/* ===== 5. Demographics ===== */}
+          <CollapsibleSection title={isZh ? '顧客統計' : 'Customer Demographics'}>
+            <div className="survey-demographics-grid">
+              <div>
+                <h3 className="survey-section-subtitle" style={{ marginBottom: 12 }}>
+                  {isZh ? '從何處得知我們' : 'How did you hear about us?'}
+                </h3>
+                <HBarChart
+                  items={demographics.heardFrom.map(([label, value]) => ({ label, value }))}
+                  isZh={isZh}
+                />
+              </div>
+              <div>
+                <h3 className="survey-section-subtitle" style={{ marginBottom: 12 }}>
+                  {isZh ? '來店頻率' : 'Visit Frequency'}
+                </h3>
+                <HBarChart
+                  items={demographics.visitFrequency.map(([label, value]) => ({ label, value }))}
+                  isZh={isZh}
+                  color="#8b5cf6"
+                />
+              </div>
+            </div>
+          </CollapsibleSection>
+
+          {/* ===== 6. Text Feedback ===== */}
+          <CollapsibleSection title={isZh ? '文字回饋' : 'Text Feedback'}>
+            <div className="survey-demographics-grid">
+              <div>
+                <h3 className="survey-section-subtitle" style={{ marginBottom: 12, color: '#f87171' }}>
+                  {isZh ? `改善建議 (${textFeedback.bad.length})` : `Improvement Suggestions (${textFeedback.bad.length})`}
+                </h3>
+                <FeedbackList items={textFeedback.bad} showAll={showAllBad} setShowAll={setShowAllBad} />
+              </div>
+              <div>
+                <h3 className="survey-section-subtitle" style={{ marginBottom: 12, color: '#4ade80' }}>
+                  {isZh ? `正面回饋 (${textFeedback.positive.length})` : `Positive Feedback (${textFeedback.positive.length})`}
+                </h3>
+                <FeedbackList items={textFeedback.positive} showAll={showAllPositive} setShowAll={setShowAllPositive} />
+              </div>
+            </div>
+          </CollapsibleSection>
         </>
       )}
+
+      {/* ===== 7. Upload (bottom, collapsible) ===== */}
+      <CollapsibleSection title={isZh ? '上傳問卷 CSV' : 'Upload Survey CSV'} defaultOpen={false}>
+        <p className="survey-section-subtitle">
+          {isZh
+            ? '從 Google Sheets 下載 CSV 後上傳對應地區的檔案'
+            : 'Download CSV from Google Sheets and upload for each region'}
+        </p>
+        <div className="survey-upload-grid">
+          {(['BC', 'CA', 'ON'] as Scope[]).map((r) => (
+            <div key={r} className="survey-upload-card">
+              <span className="survey-upload-region">{r}</span>
+              <input ref={fileRefs[r]} type="file" accept=".csv"
+                style={{ display: 'none' }} onChange={() => handleUpload(r)} />
+              <button className="survey-upload-btn"
+                onClick={() => fileRefs[r].current?.click()} disabled={uploading}>
+                {uploading ? (isZh ? '上傳中…' : 'Uploading…') : (isZh ? '選擇檔案' : 'Choose File')}
+              </button>
+              {uploadResults.find((u) => u.region === r) && (
+                <div className="survey-upload-result">
+                  {(() => {
+                    const ur = uploadResults.find((u) => u.region === r)!;
+                    return (
+                      <>
+                        <span className="survey-upload-success">
+                          {isZh ? `已處理 ${ur.inserted} 筆` : `${ur.inserted} processed`}
+                        </span>
+                        {ur.skipped > 0 && (
+                          <span className="survey-upload-skip">
+                            {isZh ? `${ur.skipped} 筆跳過` : `${ur.skipped} skipped`}
+                          </span>
+                        )}
+                        {ur.errors.length > 0 && (
+                          <span className="survey-upload-error">{ur.errors[0]}</span>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </CollapsibleSection>
     </div>
   );
 }
