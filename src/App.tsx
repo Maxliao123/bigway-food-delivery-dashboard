@@ -31,6 +31,36 @@ function App() {
   const [selectedRegion, setSelectedRegion] = useState<Scope>('BC');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
 
+  // ===== Survey time filter =====
+  type TimeGranularity = 'day' | 'month' | 'year' | 'all';
+  const [timeGranularity, setTimeGranularity] = useState<TimeGranularity>('all');
+  const [timeValue, setTimeValue] = useState<string>(''); // YYYY-MM-DD / YYYY-MM / YYYY
+
+  // Compute date range from granularity + value
+  const surveyDateFrom = useMemo(() => {
+    if (timeGranularity === 'all' || !timeValue) return undefined;
+    if (timeGranularity === 'day') return `${timeValue}T00:00:00`;
+    if (timeGranularity === 'month') return `${timeValue}-01T00:00:00`;
+    if (timeGranularity === 'year') return `${timeValue}-01-01T00:00:00`;
+    return undefined;
+  }, [timeGranularity, timeValue]);
+
+  const surveyDateTo = useMemo(() => {
+    if (timeGranularity === 'all' || !timeValue) return undefined;
+    if (timeGranularity === 'day') {
+      const d = new Date(timeValue);
+      d.setDate(d.getDate() + 1);
+      return `${d.toISOString().slice(0, 10)}T00:00:00`;
+    }
+    if (timeGranularity === 'month') {
+      const [y, m] = timeValue.split('-').map(Number);
+      const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+      return `${next}-01T00:00:00`;
+    }
+    if (timeGranularity === 'year') return `${Number(timeValue) + 1}-01-01T00:00:00`;
+    return undefined;
+  }, [timeGranularity, timeValue]);
+
   // 允許看到哪些 Region（依角色）
   const effectiveRole: RoleScope = role ?? 'ALL';
   const isMkt = effectiveRole === 'MKT';
@@ -459,7 +489,6 @@ const prevSelectableMonth = useMemo(() => {
         {/* ===== MKT: Survey Page ===== */}
         {isMkt && (
           <>
-            {/* Region filter only for MKT */}
             <div className="filter-bar">
               <div className="filter-group">
                 <span className="filter-label">{isZh ? '區域' : 'Region'}</span>
@@ -479,8 +508,68 @@ const prevSelectableMonth = useMemo(() => {
                   ))}
                 </div>
               </div>
+
+              <div className="filter-group">
+                <span className="filter-label">{isZh ? '時間' : 'Period'}</span>
+                <div className="scope-toggle">
+                  {([
+                    ['all', isZh ? '全部' : 'All'],
+                    ['year', isZh ? '年' : 'Year'],
+                    ['month', isZh ? '月' : 'Month'],
+                    ['day', isZh ? '日' : 'Day'],
+                  ] as const).map(([g, label]) => (
+                    <button
+                      key={g}
+                      type="button"
+                      className={
+                        'scope-pill' +
+                        (timeGranularity === g ? ' scope-pill-active' : '')
+                      }
+                      onClick={() => {
+                        setTimeGranularity(g as TimeGranularity);
+                        setTimeValue('');
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {timeGranularity === 'day' && (
+                  <input
+                    type="date"
+                    className="filter-select filter-date-input"
+                    value={timeValue}
+                    onChange={(e) => setTimeValue(e.target.value)}
+                  />
+                )}
+                {timeGranularity === 'month' && (
+                  <input
+                    type="month"
+                    className="filter-select filter-date-input"
+                    value={timeValue}
+                    onChange={(e) => setTimeValue(e.target.value)}
+                  />
+                )}
+                {timeGranularity === 'year' && (
+                  <select
+                    className="filter-select"
+                    value={timeValue}
+                    onChange={(e) => setTimeValue(e.target.value)}
+                  >
+                    <option value="">{isZh ? '選擇年份' : 'Select year'}</option>
+                    {Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2023 + i).map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
             </div>
-            <SurveyPanel language={language} selectedRegion={selectedRegion} />
+            <SurveyPanel
+              language={language}
+              selectedRegion={selectedRegion}
+              dateFrom={surveyDateFrom}
+              dateTo={surveyDateTo}
+            />
           </>
         )}
 

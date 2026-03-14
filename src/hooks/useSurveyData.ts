@@ -31,7 +31,7 @@ export interface StoreStats {
   foodBad: number;
 }
 
-export function useSurveyData(region: Scope) {
+export function useSurveyData(region: Scope, dateFrom?: string, dateTo?: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<SurveyRow[]>([]);
@@ -49,9 +49,15 @@ export function useSurveyData(region: Scope) {
       let hasMore = true;
       let lastErr: string | null = null;
 
+      const params: Record<string, string | null> = {
+        p_region: region,
+        p_from: dateFrom ?? null,
+        p_to: dateTo ?? null,
+      };
+
       while (hasMore) {
         const { data: rows, error: err } = await supabase
-          .rpc('get_survey_responses', { p_region: region })
+          .rpc('get_survey_responses', params)
           .range(offset, offset + PAGE - 1);
 
         if (cancelled) return;
@@ -72,7 +78,7 @@ export function useSurveyData(region: Scope) {
     })();
 
     return () => { cancelled = true; };
-  }, [region]);
+  }, [region, dateFrom, dateTo]);
 
   return { loading, error, data };
 }

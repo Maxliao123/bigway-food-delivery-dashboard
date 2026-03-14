@@ -267,11 +267,13 @@ function PieChart({
 interface Props {
   language: Lang;
   selectedRegion: Scope;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
-export function SurveyPanel({ language, selectedRegion }: Props) {
+export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo }: Props) {
   const isZh = language === 'zh';
-  const { loading, error, data } = useSurveyData(selectedRegion);
+  const { loading, error, data } = useSurveyData(selectedRegion, dateFrom, dateTo);
   const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
   const [uploading, setUploading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -282,7 +284,7 @@ export function SurveyPanel({ language, selectedRegion }: Props) {
   };
 
   // Force re-fetch after upload
-  const { data: liveData } = useSurveyData(selectedRegion);
+  const { data: liveData } = useSurveyData(selectedRegion, dateFrom, dateTo);
   const displayData = refreshKey > 0 ? liveData : data;
 
   const storeStats = useMemo(
