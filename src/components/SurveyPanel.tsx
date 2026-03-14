@@ -151,8 +151,9 @@ function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: bo
     return <div className="survey-pie-empty">{isZh ? '暫無趨勢數據' : 'No trend data'}</div>;
   }
 
-  const W = 600, H = 260;
-  const margin = { top: 20, right: 55, bottom: 40, left: 50 };
+  const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const W = 640, H = 260;
+  const margin = { top: 20, right: 55, bottom: 40, left: 65 };
   const cw = W - margin.left - margin.right;
   const ch = H - margin.top - margin.bottom;
 
@@ -221,12 +222,16 @@ function MonthlyTrendChart({ data, isZh }: { data: MonthlyTrendPoint[]; isZh: bo
         ))}
 
         {/* X axis labels */}
-        {data.map((d, i) => (
+        {data.map((d, i) => {
+          const [yr, mo] = d.month.split('-');
+          const label = `${MONTH_ABBR[parseInt(mo, 10) - 1]} '${yr.slice(2)}`;
+          return (
           <text key={i} x={getX(i)} y={H - margin.bottom + 18}
             textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize={10}>
-            {d.month.slice(5)}
+            {label}
           </text>
-        ))}
+          );
+        })}
 
         {/* Axis titles */}
         <text x={margin.left - 8} y={margin.top - 6}
