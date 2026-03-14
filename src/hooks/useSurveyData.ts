@@ -42,15 +42,31 @@ export function useSurveyData(region: Scope) {
     setError(null);
 
     (async () => {
-      const { data: rows, error: err } = await supabase
-        .rpc('get_survey_responses', { p_region: region });
+      // Supabase limits to 1000 rows per request; paginate to get all
+      const PAGE = 1000;
+      let allRows: SurveyRow[] = [];
+      let offset = 0;
+      let hasMore = true;
+      let lastErr: string | null = null;
+
+      while (hasMore) {
+        const { data: rows, error: err } = await supabase
+          .rpc('get_survey_responses', { p_region: region })
+          .range(offset, offset + PAGE - 1);
+
+        if (cancelled) return;
+        if (err) { lastErr = err.message; break; }
+        allRows = allRows.concat((rows as SurveyRow[]) ?? []);
+        hasMore = (rows?.length ?? 0) === PAGE;
+        offset += PAGE;
+      }
 
       if (cancelled) return;
-      if (err) {
-        setError(err.message);
+      if (lastErr) {
+        setError(lastErr);
         setData([]);
       } else {
-        setData((rows as SurveyRow[]) ?? []);
+        setData(allRows);
       }
       setLoading(false);
     })();
