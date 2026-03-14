@@ -262,9 +262,14 @@ function formatTrendLabel(label: string, granularity: TrendGranularity, isZh: bo
     case 'year':
       return label; // "2025"
     case 'week': {
-      // "2025-W42" → "W42"
-      const w = label.split('-W')[1];
-      return `W${w}`;
+      // "2025-W42" → "10/13–10/19"
+      const [yr, wStr] = label.split('-W');
+      const weekNum = parseInt(wStr, 10);
+      // ISO week: Jan 4 is always in week 1
+      const jan4 = new Date(parseInt(yr, 10), 0, 4);
+      const mon = new Date(jan4.getTime() + ((weekNum - 1) * 7 - ((jan4.getDay() + 6) % 7)) * 86400000);
+      const sun = new Date(mon.getTime() + 6 * 86400000);
+      return `${mon.getMonth() + 1}/${mon.getDate()}–${sun.getMonth() + 1}/${sun.getDate()}`;
     }
     case 'day': {
       const idx = Number(label);
