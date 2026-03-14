@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { google } from 'googleapis';
-import { createClient } from '@supabase/supabase-js';
 
 /* ------------------------------------------------------------------ */
 /*  Configuration                                                      */
@@ -64,11 +63,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   });
   const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
 
-  // Init Supabase client (service role key for server-side)
-  const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!,
-  );
+  // Supabase REST API config (avoid supabase-js ByteString issues with non-ASCII data)
+  const supabaseUrl = process.env.SUPABASE_URL!;
+  const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
+
+  async function callRpc(fnName: string, params: Record<string, unknown>): Promise<{ error?: string }> {
+    const resp = await fetch(`${supabaseUrl}/rest/v1/rpc/${fnName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify(params),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      return { error: text };
+    }
+    return {};
+  }
 
   const results: { region: string; total: number; inserted: number; errors: string[] }[] = [];
 
@@ -142,11 +156,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       for (let i = 0; i < records.length; i += BATCH) {
         const batch = records.slice(i, i + BATCH);
         const rpcResults = await Promise.all(
-          batch.map((rec) => supabase.rpc('upsert_survey_response', rec)),
+          batch.map((rec) => callRpc('upsert_survey_response', rec)),
         );
         const batchErrors = rpcResults.filter((r) => r.error);
         if (batchErrors.length > 0) {
-          errors.push(`Batch ${Math.floor(i / BATCH) + 1}: ${batchErrors[0].error!.message}`);
+          errors.push(`Batch ${Math.floor(i / BATCH) + 1}: ${batchErrors[0].error!}`);
         } else {
           inserted += batch.length;
         }
