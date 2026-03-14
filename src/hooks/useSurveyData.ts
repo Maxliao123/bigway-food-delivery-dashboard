@@ -387,13 +387,18 @@ export function computeMonthlyTrend(data: SurveyRow[]): MonthlyTrendPoint[] {
     }));
 }
 
-/** Get ISO week string "2026-W12" */
+/** Get ISO 8601 week string "2026-W12" (Mon=start) */
 function getISOWeek(dateStr: string): string {
-  const d = new Date(dateStr);
-  const jan4 = new Date(d.getFullYear(), 0, 4);
-  const dayDiff = Math.floor((d.getTime() - jan4.getTime()) / 86400000);
-  const weekNum = Math.ceil((dayDiff + jan4.getDay() + 1) / 7);
-  return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+  // Parse as local date to avoid timezone shifts
+  const parts = dateStr.slice(0, 10).split('-');
+  const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+  // Thursday of the same ISO week determines the year
+  const thu = new Date(d);
+  thu.setDate(thu.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const year = thu.getFullYear();
+  const jan1 = new Date(year, 0, 1);
+  const weekNum = 1 + Math.round(((thu.getTime() - jan1.getTime()) / 86400000 - 3 + ((jan1.getDay() + 6) % 7)) / 7);
+  return `${year}-W${String(weekNum).padStart(2, '0')}`;
 }
 
 /** Compute trend data grouped by the selected granularity */
@@ -432,9 +437,9 @@ export function computeTrend(data: SurveyRow[], granularity: TrendGranularity): 
     entries.sort((a, b) => a[0].localeCompare(b[0]));
   }
 
-  // Weekly: keep only the last 10 weeks to avoid crowding
-  if (granularity === 'week' && entries.length > 10) {
-    entries = entries.slice(-10);
+  // Weekly: keep only the last 6 weeks
+  if (granularity === 'week' && entries.length > 6) {
+    entries = entries.slice(-6);
   }
 
   return entries.map(([key, m]) => ({

@@ -6,6 +6,7 @@ import {
   useSurveyData, useOfficialStores,
   computeStoreStats, computeMonthlyTrend, computeAvgScores,
   computeDemographics, collectTextFeedback, computeTrend,
+  normalizeStoreName,
 } from '../hooks/useSurveyData';
 import type { StoreStats, MonthlyTrendPoint, TextFeedbackItem, TrendGranularity, TrendPoint, DemographicItem } from '../hooks/useSurveyData';
 
@@ -765,6 +766,7 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendG
   // Text feedback display limit
   const [showAllBad, setShowAllBad] = useState(false);
   const [showAllPositive, setShowAllPositive] = useState(false);
+  const [feedbackStoreFilter, setFeedbackStoreFilter] = useState<string | null>(null);
   const FEEDBACK_LIMIT = 50;
 
   const handleUpload = useCallback(
@@ -1089,20 +1091,56 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendG
 
           {/* ===== 6. Text Feedback ===== */}
           <CollapsibleSection title={isZh ? '文字回饋' : 'Text Feedback'}>
-            <div className="survey-demographics-grid">
-              <div>
-                <h3 className="survey-section-subtitle" style={{ marginBottom: 12, color: '#f87171' }}>
-                  {isZh ? `改善建議 (${textFeedback.bad.length})` : `Improvement Suggestions (${textFeedback.bad.length})`}
-                </h3>
-                <FeedbackList items={textFeedback.bad} showAll={showAllBad} setShowAll={setShowAllBad} />
-              </div>
-              <div>
-                <h3 className="survey-section-subtitle" style={{ marginBottom: 12, color: '#4ade80' }}>
-                  {isZh ? `正面回饋 (${textFeedback.positive.length})` : `Positive Feedback (${textFeedback.positive.length})`}
-                </h3>
-                <FeedbackList items={textFeedback.positive} showAll={showAllPositive} setShowAll={setShowAllPositive} />
-              </div>
-            </div>
+            {/* Store filter tags */}
+            {(() => {
+              const storeNames = storeStats.map(s => s.storeName).sort();
+              const matchesStore = (item: TextFeedbackItem, store: string) => {
+                const parts = item.store.split(',').map(s => s.trim().toLowerCase());
+                const target = store.toLowerCase();
+                return parts.some(p => p === target || normalizeStoreName(p, storeNames) === store);
+              };
+              const filteredBad = feedbackStoreFilter
+                ? textFeedback.bad.filter(i => matchesStore(i, feedbackStoreFilter))
+                : textFeedback.bad;
+              const filteredPositive = feedbackStoreFilter
+                ? textFeedback.positive.filter(i => matchesStore(i, feedbackStoreFilter))
+                : textFeedback.positive;
+              return (
+                <>
+                  <div className="survey-feedback-filter-bar">
+                    <button
+                      className={`survey-feedback-filter-tag${feedbackStoreFilter === null ? ' active' : ''}`}
+                      onClick={() => setFeedbackStoreFilter(null)}
+                    >
+                      {isZh ? '全部門店' : 'All Stores'}
+                    </button>
+                    {storeNames.map(s => (
+                      <button
+                        key={s}
+                        className={`survey-feedback-filter-tag${feedbackStoreFilter === s ? ' active' : ''}`}
+                        onClick={() => setFeedbackStoreFilter(feedbackStoreFilter === s ? null : s)}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="survey-demographics-grid">
+                    <div>
+                      <h3 className="survey-section-subtitle" style={{ marginBottom: 12, color: '#f87171' }}>
+                        {isZh ? `改善建議 (${filteredBad.length})` : `Improvement Suggestions (${filteredBad.length})`}
+                      </h3>
+                      <FeedbackList items={filteredBad} showAll={showAllBad} setShowAll={setShowAllBad} />
+                    </div>
+                    <div>
+                      <h3 className="survey-section-subtitle" style={{ marginBottom: 12, color: '#4ade80' }}>
+                        {isZh ? `正面回饋 (${filteredPositive.length})` : `Positive Feedback (${filteredPositive.length})`}
+                      </h3>
+                      <FeedbackList items={filteredPositive} showAll={showAllPositive} setShowAll={setShowAllPositive} />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </CollapsibleSection>
         </>
       )}
