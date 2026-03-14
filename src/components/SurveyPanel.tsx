@@ -500,11 +500,13 @@ function BadReviewPie({ serviceBad, cleanlinessBad, foodBad, isZh }: {
 const HEARD_COLORS = ['#f97316','#fb923c','#fbbf24','#a3e635','#34d399','#22d3ee','#818cf8','#9ca3af'];
 const RACE_COLORS = ['#6366f1','#8b5cf6','#ec4899','#14b8a6','#f59e0b','#ef4444','#3b82f6','#9ca3af'];
 
-function MiniPieChart({ data, title, colors }: {
+function MiniPieChart({ data, title, colors, breakdowns }: {
   data: [string, number][];
   title: string;
   colors: string[];
+  breakdowns?: ([string, number][] | undefined)[];
 }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   const total = data.reduce((s, d) => s + d[1], 0);
   if (total === 0) {
     return (
@@ -535,7 +537,10 @@ function MiniPieChart({ data, title, colors }: {
     paths.push(
       <path key={idx}
         d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`}
-        fill={colors[idx % colors.length]} stroke="rgba(2,6,23,0.8)" strokeWidth={2} />
+        fill={colors[idx % colors.length]} stroke="rgba(2,6,23,0.8)" strokeWidth={2}
+        style={{ cursor: breakdowns?.[idx] ? 'pointer' : undefined, opacity: hovered != null && hovered !== idx ? 0.4 : 1, transition: 'opacity 0.15s' }}
+        onMouseEnter={() => breakdowns?.[idx] && setHovered(idx)}
+        onMouseLeave={() => setHovered(null)} />
     );
 
     if (pct > 0.06) {
@@ -544,7 +549,7 @@ function MiniPieChart({ data, title, colors }: {
       pctLabels.push(
         <text key={`l${idx}`} x={cx + lr * Math.cos(midAngle)} y={cy + lr * Math.sin(midAngle)}
           textAnchor="middle" dominantBaseline="central"
-          fill="#fff" fontSize={10} fontWeight={600}>
+          fill="#fff" fontSize={10} fontWeight={600} style={{ pointerEvents: 'none' }}>
           {(pct * 100).toFixed(0)}%
         </text>
       );
@@ -552,12 +557,31 @@ function MiniPieChart({ data, title, colors }: {
     cumAngle += angle;
   });
 
+  const hoveredBreakdown = hovered != null ? breakdowns?.[hovered] : undefined;
+  const hoveredLabel = hovered != null ? data[hovered]?.[0] : '';
+  const hoveredCount = hovered != null ? data[hovered]?.[1] : 0;
+
   return (
     <div className="survey-mini-pie-wrap">
       <h4 className="survey-mini-pie-title">{title}</h4>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {paths}{pctLabels}
-      </svg>
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          {paths}{pctLabels}
+        </svg>
+        {hoveredBreakdown && (
+          <div className="survey-mini-pie-tooltip">
+            <div className="survey-mini-pie-tooltip-title">{hoveredLabel}</div>
+            {hoveredBreakdown.map(([sub, cnt], j) => (
+              <div key={j} className="survey-mini-pie-tooltip-row">
+                <span>{sub}</span>
+                <span className="survey-mini-pie-tooltip-pct">
+                  {hoveredCount > 0 ? (cnt / hoveredCount * 100).toFixed(0) : 0}%
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="survey-pie-legend">
         {data.map(([label, count], i) => (
           <div key={i} className="survey-pie-legend-item">
@@ -831,18 +855,86 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendG
                   {/* All stores summary row */}
                   {sortedStats.length > 0 && (() => {
                     const allBadRate = totalResponses > 0 ? totalBadReviews / totalResponses : 0;
+                    const allServiceBad = storeStats.reduce((s, st) => s + st.serviceBad, 0);
+                    const allCleanBad = storeStats.reduce((s, st) => s + st.cleanlinessBad, 0);
+                    const allFoodBad = storeStats.reduce((s, st) => s + st.foodBad, 0);
+                    // Aggregate heardFrom across all stores
+                    const allHeardMap = new Map<string, number>();
+                    const allHeardSubMap = new Map<string, Map<string, number>>();
+                    const allRaceMap = new Map<string, number>();
+                    for (const st of storeStats) {
+                      for (const entry of st.heardFromDist) {
+                        const [cat, count] = entry;
+                        allHeardMap.set(cat, (allHeardMap.get(cat) || 0) + count);
+                        if (entry[2]) {
+                          if (!allHeardSubMap.has(cat)) allHeardSubMap.set(cat, new Map());
+                          const sub = allHeardSubMap.get(cat)!;
+                          for (const [raw, cnt] of entry[2]) sub.set(raw, (sub.get(raw) || 0) + cnt);
+                        }
+                      }
+                      for (const [race, count] of st.raceDist) {
+                        allRaceMap.set(race, (allRaceMap.get(race) || 0) + count);
+                      }
+                    }
+                    const allHeardDist: [string, number, [string, number][]?][] = [...allHeardMap.entries()]
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([cat, count]) => {
+                        const sub = allHeardSubMap.get(cat);
+                        if (sub && sub.size > 1) {
+                          const top5 = [...sub.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+                          return [cat, count, top5] as [string, number, [string, number][]];
+                        }
+                        return [cat, count] as [string, number];
+                      });
+                    const allRaceSorted = [...allRaceMap.entries()].sort((a, b) => b[1] - a[1]);
+                    const allRaceDist: [string, number][] = allRaceSorted.length <= 8
+                      ? allRaceSorted
+                      : [...allRaceSorted.slice(0, 7), ['Other', allRaceSorted.slice(7).reduce((s, e) => s + e[1], 0)]];
+                    const isAllOpen = selectedStore === '__all__';
                     return (
-                      <tr className="survey-table-row-all" style={{ fontWeight: 600, borderBottom: '2px solid rgba(99,102,241,0.3)' }}>
-                        <td className="survey-table-store" style={{ paddingLeft: 28 }}>
-                          {isZh ? '全部門店' : 'All Stores'}
-                        </td>
-                        <td>{totalResponses}</td>
-                        <td className={totalBadReviews > 0 ? 'survey-table-bad' : ''}>{totalBadReviews}</td>
-                        <td>{(allBadRate * 100).toFixed(1)}%</td>
-                        <td style={{ color: avgScores.overall > 0 ? scoreColor(avgScores.overall) : undefined }}>
-                          {avgScores.overall > 0 ? avgScores.overall.toFixed(1) : '—'}
-                        </td>
-                      </tr>
+                      <>
+                        <tr
+                          className={`survey-table-row-all ${isAllOpen ? 'survey-table-row-active' : ''}`}
+                          style={{ fontWeight: 600, borderBottom: '2px solid rgba(99,102,241,0.3)', cursor: 'pointer' }}
+                          onClick={() => setSelectedStore(isAllOpen ? null : '__all__')}
+                        >
+                          <td className="survey-table-store">
+                            <span className={`survey-expand-icon ${isAllOpen ? 'survey-expand-icon-open' : ''}`}>&#9654;</span>
+                            {isZh ? '全部門店' : 'All Stores'}
+                          </td>
+                          <td>{totalResponses}</td>
+                          <td className={totalBadReviews > 0 ? 'survey-table-bad' : ''}>{totalBadReviews}</td>
+                          <td>{(allBadRate * 100).toFixed(1)}%</td>
+                          <td style={{ color: avgScores.overall > 0 ? scoreColor(avgScores.overall) : undefined }}>
+                            {avgScores.overall > 0 ? avgScores.overall.toFixed(1) : '—'}
+                          </td>
+                        </tr>
+                        <tr className="survey-table-expand-row">
+                          <td colSpan={5}>
+                            <div className={`survey-table-expand-content ${isAllOpen ? 'survey-expand-open' : ''}`}>
+                              <div className="survey-expand-inner survey-expand-row-layout">
+                                <div className="survey-expand-col">
+                                  <h4 className="survey-mini-pie-title">
+                                    {isZh ? '差評原因分析' : 'Bad Review Analysis'}
+                                  </h4>
+                                  <BadReviewPie serviceBad={allServiceBad} cleanlinessBad={allCleanBad} foodBad={allFoodBad} isZh={isZh} />
+                                </div>
+                                <div className="survey-expand-col">
+                                  <MiniPieChart
+                                    data={allHeardDist.map(([l, v]) => [l, v] as [string, number])}
+                                    title={isZh ? '怎麼知道我們' : 'How They Found Us'}
+                                    colors={HEARD_COLORS}
+                                    breakdowns={allHeardDist.map(e => e[2])}
+                                  />
+                                </div>
+                                <div className="survey-expand-col">
+                                  <MiniPieChart data={allRaceDist} title={isZh ? '族群分布' : 'Ethnicity'} colors={RACE_COLORS} />
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      </>
                     );
                   })()}
                   {sortedStats.map((s) => (
@@ -878,9 +970,10 @@ export function SurveyPanel({ language, selectedRegion, dateFrom, dateTo, trendG
                               </div>
                               <div className="survey-expand-col">
                                 <MiniPieChart
-                                  data={s.heardFromDist}
+                                  data={s.heardFromDist.map(([l, v]) => [l, v] as [string, number])}
                                   title={isZh ? '怎麼知道我們' : 'How They Found Us'}
                                   colors={HEARD_COLORS}
+                                  breakdowns={s.heardFromDist.map(e => e[2])}
                                 />
                               </div>
                               <div className="survey-expand-col">

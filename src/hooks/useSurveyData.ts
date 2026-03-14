@@ -33,7 +33,7 @@ export interface StoreStats {
   avgService: number;
   avgCleanliness: number;
   avgFood: number;
-  heardFromDist: [string, number][];
+  heardFromDist: [string, number, [string, number][]?][];
   raceDist: [string, number][];
 }
 
@@ -255,6 +255,7 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
     sumClean: number; cntClean: number;
     sumFood: number; cntFood: number;
     heardFrom: Map<string, number>;
+    heardFromSub: Map<string, Map<string, number>>;
     race: Map<string, number>;
   }>();
 
@@ -276,7 +277,7 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
           total: 0, bad: 0, serviceBad: 0, cleanlinessBad: 0, foodBad: 0,
           sumOverall: 0, cntOverall: 0, sumService: 0, cntService: 0,
           sumClean: 0, cntClean: 0, sumFood: 0, cntFood: 0,
-          heardFrom: new Map(), race: new Map(),
+          heardFrom: new Map(), heardFromSub: new Map(), race: new Map(),
         };
         map.set(store, s);
       }
@@ -296,8 +297,12 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
 
       // Heard from
       if (row.heard_from) {
-        const cat = categorizeHeardFrom(row.heard_from);
+        const raw = row.heard_from.trim();
+        const cat = categorizeHeardFrom(raw);
         s.heardFrom.set(cat, (s.heardFrom.get(cat) || 0) + 1);
+        if (!s.heardFromSub.has(cat)) s.heardFromSub.set(cat, new Map());
+        const sub = s.heardFromSub.get(cat)!;
+        sub.set(raw, (sub.get(raw) || 0) + 1);
       }
       // Race demographic
       if (row.race_demographic) {
@@ -317,7 +322,6 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
       if (sorted.length <= 7) return sorted;
       const top = sorted.slice(0, 6);
       const otherCount = sorted.slice(6).reduce((sum, e) => sum + e[1], 0);
-      // Merge into existing "Other" if present
       const existingOther = top.findIndex(e => e[0] === 'Other');
       if (existingOther >= 0) {
         top[existingOther] = ['Other', top[existingOther][1] + otherCount];
@@ -325,6 +329,19 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
         top.push(['Other', otherCount]);
       }
       return top;
+    };
+
+    // Build heardFrom dist with sub-breakdowns (top 5 raw values per category)
+    const buildHeardDist = (): [string, number, [string, number][]?][] => {
+      const base = buildDist(s.heardFrom);
+      return base.map(([cat, count]) => {
+        const sub = s.heardFromSub.get(cat);
+        if (sub && sub.size > 1) {
+          const top5 = [...sub.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+          return [cat, count, top5] as [string, number, [string, number][]];
+        }
+        return [cat, count] as [string, number];
+      });
     };
 
     result.push({
@@ -339,7 +356,7 @@ export function computeStoreStats(data: SurveyRow[], officialStores?: string[]):
       avgService: s.cntService > 0 ? s.sumService / s.cntService : 0,
       avgCleanliness: s.cntClean > 0 ? s.sumClean / s.cntClean : 0,
       avgFood: s.cntFood > 0 ? s.sumFood / s.cntFood : 0,
-      heardFromDist: buildDist(s.heardFrom),
+      heardFromDist: buildHeardDist(),
       raceDist: buildDist(s.race),
     });
   }
